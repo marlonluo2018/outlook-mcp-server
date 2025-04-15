@@ -109,7 +109,7 @@ The server provides the following tools with detailed functionality:
 
 1. Use `list_folders` to see all available mail folders
 2. Use `list_recent_emails` to view recent emails (e.g., from last 7 days)
-3. Use `search_emails` to find specific emails by keywords
+3. Use `view_email_cache(page=1)` to browse through matching emails in pages of 1
 4. Use `get_email_by_number` to view a complete email
 5. Use `reply_to_email_by_number` to respond to an email
 
@@ -123,6 +123,11 @@ Could you show me my unread emails from the last 3 days?
 ### Searching for Emails
 ```
 Search for emails about "project update OR meeting notes" in the last week
+```
+
+### Viewing Cached Emails
+```
+Show me page 2 of my cached emails
 ```
 
 ### Reading Email Details
