@@ -29,36 +29,28 @@ pip install mcp>=1.2.0 pywin32>=305
 
 3. Configure Claude Desktop (or your preferred MCP client) to use this server
 
-## Configuration
+## Usage
 
-### Claude Desktop Configuration
+### Configure your MCP client to start it automatically. 
 
-Add the following to your `MCP_client_config.json` file:
+Add this to your MCP client config:
 
 ```json
 {
   "mcpServers": {
     "outlook": {
+      "isActive": true,
+      "name": "outlook",
+      "description": "Outlook Tools",
       "command": "python",
-      "args": ["Your path\\outlook_mcp_server.py"],
-      "env": {}
+      "args": [
+        "${workspaceFolder}/outlook_mcp_server.py"
+
+      ]
     }
   }
 }
 ```
-
-
-## Usage
-
-### Starting the Server
-
-You can start the server directly:
-
-```bash
-python outlook_mcp_server.py
-```
-
-Or allow an MCP client like Claude Desktop to start it via the configuration.
 
 ### Available Tools
 
