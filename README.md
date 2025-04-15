@@ -14,7 +14,7 @@ A Model Context Protocol (MCP) server that provides access to Microsoft Outlook 
 ## Prerequisites
 
 - Windows operating system
-- Python 3.10 or later
+- Python 3.11 or later
 - Microsoft Outlook installed and configured with an active account
 - Claude Desktop or another MCP-compatible client
 
@@ -62,14 +62,48 @@ Or allow an MCP client like Claude Desktop to start it via the configuration.
 
 ### Available Tools
 
-The server provides the following tools:
+The server provides the following tools with detailed functionality:
 
-1. `list_folders`: Lists all available mail folders in Outlook
-2. `list_recent_emails`: Lists email titles from the specified number of days
-3. `search_emails`: Searches emails by contact name or keyword
-4. `get_email_by_number`: Retrieves detailed content of a specific email
-5. `reply_to_email_by_number`: Replies to a specific email
-6. `compose_email`: Creates and sends a new email
+1. **list_folders**:  
+   - Lists all available mail folders in Outlook  
+   - Shows folder hierarchy up to 3 levels deep  
+   - Returns formatted list of folders and subfolders  
+
+2. **list_recent_emails**:  
+   - Lists email titles from specified number of days (1-30)  
+   - Can specify folder to search (defaults to Inbox)  
+   - Caches results for detailed viewing  
+   - Returns number of emails found and instructions to view them  
+
+3. **search_emails**:  
+   - Searches emails by contact name or keyword  
+   - Supports OR operators for multiple search terms  
+   - Searches subject, sender name, and body content  
+   - Returns number of matches and instructions to view them  
+
+4. **view_email_cache**:  
+   - Views cached emails in pages of 5  
+   - Shows email subject, sender, received time, and read status  
+   - Provides navigation to next/previous pages  
+   - Requires prior use of list_recent_emails or search_emails  
+
+5. **get_email_by_number**:  
+   - Retrieves detailed content of a specific email  
+   - Shows full email body, recipients, and attachments  
+   - Requires email number from cached listing  
+   - Provides option to reply to the email  
+
+6. **reply_to_email_by_number**:  
+   - Replies to a specific email by its number  
+   - Uses email number from cached listing  
+   - Sends reply with specified text content  
+   - Maintains original email thread  
+
+7. **compose_email**:  
+   - Creates and sends a new email  
+   - Supports recipient, subject, and body content  
+   - Optional CC field for additional recipients  
+   - Handles email sending through Outlook client
 
 ### Example Workflow
 
