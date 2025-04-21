@@ -90,6 +90,9 @@ The server provides the following tools with detailed functionality:
    - Uses email number from cached listing  
    - Sends reply with specified text content  
    - Maintains original email thread  
+   - Optional: Specify custom recipients for "To" and "CC" fields  
+     - Default behavior replies to all (sender + CC)  
+     - Allows overriding default recipients if needed  
 
 7. **compose_email**:  
    - Creates and sends a new email  

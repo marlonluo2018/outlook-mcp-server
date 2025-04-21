@@ -387,45 +387,56 @@ def get_email_by_number(email_number: int) -> str:
         return f"Error retrieving email details: {str(e)}"
 
 @mcp.tool()
-def reply_to_email_by_number(email_number: int, reply_text: str) -> str:
+def reply_to_email_by_number(
+    email_number: int,
+    reply_text: str,
+    to_recipients: Optional[List[str]] = None,
+    cc_recipients: Optional[List[str]] = None
+) -> str:
     """
-    Reply to a specific email by its number from the last listing
+    Reply to an email. Uses custom recipients if provided; otherwise replies to all.
     
     Args:
-        email_number: The number of the email from the list results
-        reply_text: The text content for the reply
-        
-    Returns:
-        Status message indicating success or failure
+        email_number: Email's position in the last listing
+        reply_text: Text to prepend to the reply
+        to_recipients: List of "To" emails (if provided, replaces original recipients)
+        cc_recipients: List of "CC" emails (if provided, replaces original recipients)
     """
     try:
         if not email_cache:
-            return "Error: No emails have been listed yet. Please use list_recent_emails or search_emails first."
+            return "Error: No emails listed. Use list_recent_emails() first."
         
         if email_number not in email_cache:
-            return f"Error: Email #{email_number} not found in the current listing."
+            return f"Error: Email #{email_number} not found."
         
         email_id = email_cache[email_number]["id"]
-        
-        # Connect to Outlook
         outlook, namespace = connect_to_outlook()
-        
-        # Retrieve the specific email
         email = namespace.GetItemFromID(email_id)
         if not email:
-            return f"Error: Email #{email_number} could not be retrieved from Outlook."
-        
-        # Create reply
-        reply = email.Reply()
-        reply.Body = reply_text
-        
-        # Send the reply
+            return f"Error: Could not retrieve email #{email_number}."
+
+        # Initialize reply
+        if to_recipients is None and cc_recipients is None:
+            reply = email.ReplyAll()  # Default: reply to all original recipients
+        else:
+            reply = email.Reply()     # Start fresh for custom recipients
+            if to_recipients:
+                reply.To = "; ".join(to_recipients)  # Set custom To
+            if cc_recipients:
+                reply.CC = "; ".join(cc_recipients)  # Set custom CC
+
+        # Set reply text and send
+        reply.Body = f"{reply_text}\n\n{reply.Body}"
         reply.Send()
         
-        return f"Reply sent successfully to: {email.SenderName} <{email.SenderEmailAddress}>"
+        # Generate recipient summary
+        recipient_info = []
+        if reply.To: recipient_info.append(f"To: {reply.To}")
+        if reply.CC: recipient_info.append(f"CC: {reply.CC}")
+        return f"Reply sent to {', '.join(recipient_info)}"
     
     except Exception as e:
-        return f"Error replying to email: {str(e)}"
+        return f"Error: {str(e)}"
 
 @mcp.tool()
 def compose_email(recipient_email: str, subject: str, body: str, cc_email: Optional[str] = None) -> str:
