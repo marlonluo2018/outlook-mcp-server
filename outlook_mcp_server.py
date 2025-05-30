@@ -236,7 +236,7 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
         if not emails:
             return f"No emails found in {folder_display} from the last {days} days."
         
-        return f"Found {len(emails)} emails in {folder_display} from the last {days} days. Use view_email_cache(page=1) to view them in pages of 5."
+        return f"Found {len(emails)} emails in {folder_display} from the last {days} days. Use view_email_cache(page=1) to view page #1 of first 5 emails."
     
     except Exception as e:
         return f"Error retrieving email titles: {str(e)}"
@@ -286,7 +286,7 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         if not emails:
             return f"No emails matching '{search_term}' found in {folder_display} from the last {days} days."
         
-        return f"Found {len(emails)} emails matching '{search_term}' in {folder_display} from the last {days} days. Use view_email_cache(page=1) to view them in pages of 5."
+        return f"Found {len(emails)} emails matching '{search_term}' in {folder_display} from the last {days} days. Use view_email_cache(page=1) to view page #1 of first 5 emails."
     
     except Exception as e:
         return f"Error searching emails: {str(e)}"
@@ -395,6 +395,7 @@ def reply_to_email_by_number(
 ) -> str:
     """
     Reply to an email. Uses custom recipients if provided; otherwise replies to all.
+    Matches Outlook's native reply behavior including message history format.
     
     Args:
         email_number: Email's position in the last listing
@@ -404,39 +405,114 @@ def reply_to_email_by_number(
     """
     try:
         if not email_cache:
-            return "Error: No emails listed. Use list_recent_emails() first."
+            return "No emails available - please list emails first."
         
         if email_number not in email_cache:
-            return f"Error: Email #{email_number} not found."
+            return f"Email #{email_number} not found in current listing."
         
         email_id = email_cache[email_number]["id"]
         outlook, namespace = connect_to_outlook()
-        email = namespace.GetItemFromID(email_id)
-        if not email:
-            return f"Error: Could not retrieve email #{email_number}."
-
-        # Initialize reply
-        if to_recipients is None and cc_recipients is None:
-            reply = email.ReplyAll()  # Default: reply to all original recipients
-        else:
-            reply = email.Reply()     # Start fresh for custom recipients
-            if to_recipients:
-                reply.To = "; ".join(to_recipients)  # Set custom To
-            if cc_recipients:
-                reply.CC = "; ".join(cc_recipients)  # Set custom CC
-
-        # Set reply text and send
-        reply.Body = f"{reply_text}\n\n{reply.Body}"
-        reply.Send()
         
-        # Generate recipient summary
-        recipient_info = []
-        if reply.To: recipient_info.append(f"To: {reply.To}")
-        if reply.CC: recipient_info.append(f"CC: {reply.CC}")
-        return f"Reply sent to {', '.join(recipient_info)}"
-    
+        try:
+            email = namespace.GetItemFromID(email_id)
+            if not email:
+                return "Could not retrieve the email from Outlook."
+            
+            # Create reply based on recipient preference
+            if to_recipients is None and cc_recipients is None:
+                reply = email.ReplyAll()  # Default reply to all
+            else:
+                reply = email.Reply()     # Start fresh for custom recipients
+                if to_recipients:
+                    reply.To = "; ".join(to_recipients)
+                if cc_recipients:
+                    reply.CC = "; ".join(cc_recipients)
+
+            # Preserve HTML formatting if available
+            if hasattr(email, 'HTMLBody') and email.HTMLBody:
+                # Format HTML reply with original message history
+                html_reply = f"<div>{reply_text}</div>"
+                html_reply += "<div style='border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0in 0in 0in'>"
+                html_reply += f"<div><b>From:</b> {email.SenderName} <{email.SenderEmailAddress}></div>"
+                html_reply += f"<div><b>Sent:</b> {email.ReceivedTime.strftime('%A, %B %d, %Y %I:%M %p')}</div>"
+                html_reply += f"<div><b>To:</b> {email.To}</div>"
+                if email.CC:
+                    html_reply += f"<div><b>Cc:</b> {email.CC}</div>"
+                html_reply += f"<div><b>Subject:</b> {email.Subject}</div><br>"
+                
+                # Process HTML body to modify security banner styling
+                html_body = email.HTMLBody
+                # Look for multiple indicators of security banner
+                if ("This Message Is From an Untrusted Sender" in html_body or
+                    any("BannerStart" in part for part in html_body.split("<p>")) or
+                    "proofpoint.com/EWT" in html_body):
+                    # Find the opening <p> tag containing BannerStart
+                    banner_start = -1
+                    p_tags = html_body.split("<p>")
+                    for i in range(1, len(p_tags)):
+                        if "BannerStart" in p_tags[i].split(">")[0]:
+                            banner_start = sum(len(p_tags[j]) + 3 for j in range(i))  # +3 for "<p>"
+                            break
+                    
+                    if banner_start != -1:
+                        # Insert style into the <p> tag
+                        html_body = (html_body[:banner_start+2] +
+                                    " style='font-size:0.8em; background-color:#f5f5f5; padding:5px; margin-bottom:10px;'" +
+                                    html_body[banner_start+2:])
+                
+                html_reply += html_body
+                html_reply += "</div>"
+                
+                reply.HTMLBody = html_reply
+                # Plain text version with proper formatting
+                # Create HTML version with proper page breaker
+                html_reply = f"<div>{reply_text}</div>"
+                html_reply += "<div style='border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0in 0in 0in'>"
+                html_reply += f"<div><b>From:</b> {email.SenderName}</div>"
+                html_reply += f"<div><b>Sent:</b> {email.ReceivedTime.strftime('%Y-%m-%d %H:%M:%S')}</div>"
+                html_reply += f"<div><b>To:</b> {email.To}</div>"
+                if email.CC:
+                    html_reply += f"<div><b>Cc:</b> {email.CC}</div>"
+                html_reply += f"<div><b>Subject:</b> {email.Subject}</div><br>"
+                html_reply += email.HTMLBody if hasattr(email, 'HTMLBody') and email.HTMLBody else email.Body
+                html_reply += "</div>"
+                
+                reply.HTMLBody = html_reply
+                
+                # Plain text version with minimal formatting
+                reply.Body = f"{reply_text}\n\n" + \
+                            f"From: {email.SenderName}\n" + \
+                            f"Sent: {email.ReceivedTime.strftime('%Y-%m-%d %H:%M:%S')}\n" + \
+                            f"To: {email.To}\n" + \
+                            (f"Cc: {email.CC}\n" if email.CC else "") + \
+                            f"Subject: {email.Subject}\n\n" + \
+                            email.Body
+            else:
+                # Fallback to plain text formatting
+                reply_body = f"{reply_text}\n\n"
+                reply_body += f"From: {email.SenderName}\n"
+                reply_body += f"Sent: {email.ReceivedTime.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                reply_body += f"To: {email.To}\n"
+                if email.CC:
+                    reply_body += f"Cc: {email.CC}\n"
+                reply_body += f"Subject: {email.Subject}\n\n"
+                reply_body += email.Body
+                reply.Body = reply_body
+            reply.Send()
+            
+            return "Reply sent successfully."
+            
+        except Exception as e:
+            return "Failed to send reply - please try again."
+            
+        finally:
+            # Clean up COM objects
+            email = None
+            namespace = None
+            outlook = None
+            
     except Exception as e:
-        return f"Error: {str(e)}"
+        return "An error occurred while processing your request."
 
 @mcp.tool()
 def compose_email(recipient_email: str, subject: str, body: str, cc_email: Optional[str] = None) -> str:
