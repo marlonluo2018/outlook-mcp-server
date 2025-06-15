@@ -81,7 +81,7 @@ def clear_email_cache():
     global email_cache
     email_cache = {}
 
-def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None):
+def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None, match_all: bool = False):
     """Get emails from a folder with optional search filter"""
     emails_list = []
     
@@ -96,23 +96,63 @@ def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None)
         
         # If we have a search term, apply it
         if search_term:
-            # Handle OR operators in search term
-            search_terms = [term.strip() for term in search_term.split(" OR ")]
+            print(f"\nDEBUG: Applying search filter for term: {search_term}")
+            print(f"DEBUG: match_all mode: {match_all}")
+            
+            # Parse search terms preserving quoted phrases
+            search_terms = []
+            in_quote = False
+            current_term = ""
+            
+            for char in search_term:
+                if char == '"':
+                    if in_quote:
+                        # End of quoted term
+                        if current_term:
+                            search_terms.append(current_term)
+                        current_term = ""
+                    in_quote = not in_quote
+                elif char == " " and not in_quote:
+                    # Space outside quote - split term
+                    if current_term:
+                        search_terms.append(current_term)
+                    current_term = ""
+                else:
+                    current_term += char
+            
+            # Add any remaining term
+            if current_term:
+                search_terms.append(current_term)
+            
+            # Remove empty terms and clean up
+            search_terms = [term.strip() for term in search_terms if term.strip()]
             
             # Try to create a filter for subject, sender name or body
             try:
-                # Build SQL filter with OR conditions for each search term
+                print("DEBUG: Attempting SQL filter...")
+                # Build SQL filter based on match_all mode
                 sql_conditions = []
                 for term in search_terms:
-                    sql_conditions.append(f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'")
-                    sql_conditions.append(f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'")
-                    sql_conditions.append(f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'")
+                    # Escape single quotes for SQL
+                    safe_term = term.replace("'", "''")
+                    term_conditions = [
+                        f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_term}%'",
+                        f"\"urn:schemas:httpmail:fromname\" LIKE '%{safe_term}%'",
+                        f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_term}%'"
+                    ]
+                    sql_conditions.append("(" + " OR ".join(term_conditions) + ")")
                 
-                filter_term = f"@SQL=" + " OR ".join(sql_conditions)
+                if match_all:
+                    filter_term = f"@SQL=" + " AND ".join(sql_conditions)
+                else:
+                    filter_term = f"@SQL=" + " OR ".join(sql_conditions)
+                print(f"DEBUG: SQL filter term: {filter_term}")
+                print(f"DEBUG: Parsed search terms: {search_terms}")
                 folder_items = folder_items.Restrict(filter_term)
-            except:
+                print("DEBUG: SQL filter applied successfully")
+            except Exception as e:
+                print(f"DEBUG: SQL filter failed, falling back to manual filter: {str(e)}")
                 # If filtering fails, we'll do manual filtering later
-                pass
         
         # Process emails
         count = 0
@@ -128,17 +168,30 @@ def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None)
                     
                     # Manual search filter if needed
                     if search_term and folder_items == folder.Items:  # If we didn't apply filter earlier
-                        # Handle OR operators in search term for manual filtering
-                        search_terms = [term.strip().lower() for term in search_term.split(" OR ")]
+                        # Split search terms (support both space and OR separator)
+                        search_terms = []
+                        for part in search_term.split(" OR "):
+                            search_terms.extend(part.strip().lower().split())
+                        search_terms = [term for term in search_terms if term]
                         
-                        # Check if any of the search terms match
-                        found_match = False
-                        for term in search_terms:
-                            if (term in item.Subject.lower() or 
-                                term in item.SenderName.lower() or 
-                                term in item.Body.lower()):
-                                found_match = True
-                                break
+                        # Check matches based on mode
+                        if match_all:
+                            # All terms must match somewhere
+                            found_match = all(
+                                any(term in field.lower() for field in [
+                                    item.Subject,
+                                    item.SenderName,
+                                    item.Body
+                                ])
+                                for term in search_terms
+                            )
+                        else:
+                            # Any term can match anywhere
+                            found_match = any(
+                                term in field.lower()
+                                for term in search_terms
+                                for field in [item.Subject, item.SenderName, item.Body]
+                            )
                         
                         if not found_match:
                             continue
@@ -197,8 +250,16 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
     except Exception as e:
         return f"Error retrieving email titles: {str(e)}"
 
-def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None) -> str:
-    """Search emails by contact name or keyword within a time period"""
+def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = False) -> str:
+    """Search emails by contact name or keyword within a time period
+    
+    Args:
+        search_term: Keywords to search for
+        days: Number of days to search back (1-30)
+        folder_name: Optional folder name (default: Inbox)
+        match_all: If True, requires all keywords to match (AND logic)
+                   If False, matches any keyword (OR logic, default)
+    """
     if not search_term:
         return "Error: Please provide a search term"
     if not isinstance(days, int) or days < 1 or days > MAX_DAYS:
@@ -211,7 +272,7 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
             return f"Error: Folder '{folder_name}' not found"
         
         clear_email_cache()
-        emails = get_emails_from_folder(folder, days, search_term)
+        emails = get_emails_from_folder(folder, days, search_term, match_all)
         for i, email in enumerate(emails, 1):
             email_cache[i] = email
         
@@ -429,8 +490,9 @@ if __name__ == "__main__":
             term = input("Enter search term: ").strip()
             days = input("Enter number of days (1-30): ").strip()
             folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
+            match_all = input("Match all terms? (y/n, default=n): ").strip().lower() == 'y'
             try:
-                print(search_emails(term, int(days), folder))
+                print(search_emails(term, int(days), folder, match_all))
             except ValueError:
                 print("Invalid days input - must be a number")
                 

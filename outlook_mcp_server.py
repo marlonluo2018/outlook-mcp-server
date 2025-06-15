@@ -14,7 +14,8 @@ def list_folders() -> str:
 @mcp.tool()
 def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
     """
-    List email titles from the specified number of days
+    Get count of recent emails and load them into email cache.
+    Use view_email_cache to view basic email information.
     
     Args:
         days: Number of days to look back (default: 7, max: 30)
@@ -23,34 +24,39 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
     return ops.list_recent_emails(days, folder_name)
 
 @mcp.tool()
-def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None) -> str:
+def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = False) -> str:
     """
-    Search emails by contact name or keyword within a time period
+    Search emails and load matching ones into email cache.
+    Returns count of matches - use view_email_cache to view basic email information.
     
     Args:
         search_term: Name or keyword to search for
         days: Number of days to look back (default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True, requires ALL search terms to match (AND logic).
+                  If False, matches ANY search term (OR logic, default)
     """
-    return ops.search_emails(search_term, days, folder_name)
+    return ops.search_emails(search_term, days, folder_name, match_all)
 
 @mcp.tool()
 def view_email_cache(page: int = 1) -> str:
     """
-    View emails from cache in pages of 5
+    View basic information of cached emails (5 emails per page).
+    Shows sender, subject, date - use get_email_by_number for full content.
     
     Args:
-        page: Page number to view (1-based)
+        page: Page number to view (1-based, each page contains 5 emails)
     """
     return ops.view_email_cache(page)
 
 @mcp.tool()
 def get_email_by_number(email_number: int) -> str:
     """
-    Get detailed content of a specific email by its number from the last listing
+    Get full email content including body and attachments by its cache number.
+    Requires emails to be loaded first via list_recent_emails or search_emails.
     
     Args:
-        email_number: The number of the email from the list results
+        email_number: The number of the email in the cache (1-based)
     """
     return ops.get_email_by_number(email_number)
 
