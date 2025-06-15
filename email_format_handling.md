@@ -71,5 +71,10 @@ else:
 ## Key Features
 - **Graceful Degradation**: Falls back to plain text if HTML unavailable
 - **Consistent Formatting**: Maintains Outlook-like formatting in both modes
-- **Security Awareness**: Handles security banners appropriately
+- **Security Awareness**: Handles security banners appropriately by:
+  - Detecting "Untrusted Sender" warnings
+  - Identifying Proofpoint EWT links
+  - Finding Outlook "BannerStart" markers
+  - Applying subtle styling to banners
 - **Complete Information**: Preserves all message headers and metadata
+- **Custom Recipients**: Supports overriding default reply recipients

@@ -67,11 +67,11 @@ The server provides the following tools with detailed functionality:
    - Caches results for detailed viewing  
    - Returns number of emails found and instructions to view them  
 
-3. **search_emails**:  
-   - Searches emails by contact name or keyword  
-   - Supports OR operators for multiple search terms  
-   - Searches subject, sender name, and body content  
-   - Returns number of matches and instructions to view them  
+3. **search_emails(search_terms, match_all=False, folder="Inbox")**:
+   - Searches emails by contact name, keyword, or exact phrases (use quotes)
+   - Supports AND/OR operators between terms (match_all=True for AND)
+   - Searches subject, sender name, and body content
+   - Returns number of matches and instructions to view them
 
 4. **view_email_cache**:  
    - Views cached emails in pages of 5  
@@ -79,10 +79,23 @@ The server provides the following tools with detailed functionality:
    - Provides navigation to next/previous pages  
    - Requires prior use of list_recent_emails or search_emails  
 
-5. **get_email_by_number**:  
-   - Retrieves detailed content of a specific email  
-   - Shows full email body, recipients, and attachments  
-   - Requires email number from cached listing  
+5. **get_email_by_number**:
+   - Retrieves detailed content of a specific email
+   - Shows full email body (HTML or plain text), recipients, and attachments
+   - Requires email number from cached listing
+   - Supports overriding reply recipients when replying
+
+6. **compose_email(recipients, subject, body, cc=None, bcc=None, html=False)**:
+   - Creates and sends new emails
+   - Supports multiple recipients (comma-separated)
+   - HTML or plain text formatting
+   - CC/BCC recipients supported
+
+7. **reply_to_email(email_number, reply_text, html=False, recipients=None)**:
+   - Replies to existing emails
+   - Overrides default reply recipients when specified
+   - Preserves original message formatting
+   - HTML or plain text replies supported
    - Provides option to reply to the email  
 
 6. **reply_to_email_by_number**:  

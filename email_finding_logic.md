@@ -35,14 +35,17 @@ threshold_date = now - datetime.timedelta(days=days)
 #### Search Filtering
 Two approaches:
 1. **SQL Filtering (Preferred)**
-   - Uses Outlook's RESTRICT method
-   - Searches subject, sender name and body
-   - Supports OR operators
+- Uses Outlook's RESTRICT method
+- Searches subject, sender name and body
+- Supports both AND and OR operators (controlled by match_all parameter)
+- Handles quoted phrases as single terms (e.g., "project x")
+- Splits terms by spaces outside quotes
 
 2. **Manual Filtering (Fallback)**
-   - Python-level string matching
-   - Case-insensitive search
-   - Also supports OR operators
+- Python-level string matching
+- Case-insensitive search
+- Supports both AND and OR logic (controlled by match_all parameter)
+- Handles quoted phrases and splits terms by spaces outside quotes
 
 ### 3. Email Processing Pipeline
 1. Sort emails by received time (newest first)
@@ -97,9 +100,13 @@ graph TD
 - Gets recent emails from specified folder (default: Inbox)
 - Returns count and instructions to view
 
-### `search_emails(search_term, days=7, folder_name=None)`
-- Searches emails by keyword/contact
-- Returns matching emails count and view instructions
+### `search_emails(search_term, days=7, folder_name=None, match_all=False)`
+   - Searches emails by keyword/contact
+   - Supports quoted phrases (e.g., "project x")
+   - Splits terms by spaces outside quotes
+   - match_all=True requires ALL terms to match (AND logic)
+   - match_all=False matches ANY term (OR logic, default)
+   - Returns matching emails count and view instructions
 
 ## Caching Mechanism
 - All found emails are cached in `email_cache` dictionary

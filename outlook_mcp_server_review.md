@@ -18,7 +18,7 @@ graph TD
     
     E --> E1[list_folders]
     E --> E2[list_recent_emails]
-    E --> E3[search_emails]
+    E --> E3[search_emails<br/>- Quoted phrase support<br/>- AND/OR logic]
     E --> E4[view_email_cache]
     E --> E5[get_email_by_number]
     E --> E6[reply_to_email_by_number]
@@ -36,6 +36,8 @@ graph TD
 1. **Complete Feature Set**
    - Covers all essential email operations
    - Includes both reading and writing capabilities
+   - Supports HTML email composition/replies
+   - Handles security banners intelligently
 
 2. **Robust Error Handling**
    - Wraps all Outlook COM operations in try-catch
@@ -74,8 +76,9 @@ graph TD
 
 ### 3. Input Validation
 - **Current Issues**:
-  - No email format validation
-  - Search terms not sanitized
+  - Email format validation could be stricter
+  - Search terms sanitized but could be more robust
+  - Security banner detection could be expanded
 - **Recommendations**:
   - Add email regex validation
   - Implement search term sanitization
@@ -116,7 +119,7 @@ graph TD
 
 | Category            | Score (1-5) | Notes                          |
 |---------------------|------------|--------------------------------|
-| Functionality       | 5          | Complete feature set           |
+| Functionality       | 5          | Complete feature set with enhanced search and HTML support |
 | Reliability         | 4          | Good but could be more robust  |
 | Performance         | 3          | Lacks optimizations            |
 | Security            | 3          | Basic but needs hardening      |
