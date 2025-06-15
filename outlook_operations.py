@@ -52,7 +52,12 @@ def format_email(mail_item) -> Dict[str, Any]:
             for i in range(1, mail_item.Recipients.Count + 1):
                 recipient = mail_item.Recipients(i)
                 try:
-                    recipients.append(f"{recipient.Name} <{recipient.Address}>")
+                    if not recipient.Address.startswith('/o='):
+                        # Regular email format
+                        recipients.append(f"{recipient.Name} <{recipient.Address}>")
+                    else:
+                        # Exchange directory format - just show name
+                        recipients.append(f"{recipient.Name}")
                 except:
                     recipients.append(f"{recipient.Name}")
         
@@ -62,7 +67,7 @@ def format_email(mail_item) -> Dict[str, Any]:
             "conversation_id": mail_item.ConversationID if hasattr(mail_item, 'ConversationID') else None,
             "subject": mail_item.Subject,
             "sender": mail_item.SenderName,
-            "sender_email": mail_item.SenderEmailAddress,
+            "sender_email": mail_item.SenderName if mail_item.SenderEmailAddress.startswith('/o=') else mail_item.SenderEmailAddress,
             "received_time": mail_item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if mail_item.ReceivedTime else None,
             "recipients": recipients,
             "body": mail_item.Body,
@@ -129,17 +134,28 @@ def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None,
             
             # Try to create a filter for subject, sender name or body
             try:
-                print("DEBUG: Attempting SQL filter...")
+                print(f"DEBUG: Building SQL filter for terms: {search_terms}")
                 # Build SQL filter based on match_all mode
                 sql_conditions = []
                 for term in search_terms:
                     # Escape single quotes for SQL
                     safe_term = term.replace("'", "''")
-                    term_conditions = [
-                        f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_term}%'",
-                        f"\"urn:schemas:httpmail:fromname\" LIKE '%{safe_term}%'",
-                        f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_term}%'"
-                    ]
+                    
+                    # Check if term was originally quoted (contains space)
+                    if ' ' in term:
+                        # Exact match for quoted phrases
+                        term_conditions = [
+                            f"\"urn:schemas:httpmail:subject\" = '{safe_term}'",
+                            f"\"urn:schemas:httpmail:fromname\" = '{safe_term}'",
+                            f"\"urn:schemas:httpmail:textdescription\" = '{safe_term}'"
+                        ]
+                    else:
+                        # Partial word match for single terms
+                        term_conditions = [
+                            f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_term}%'",
+                            f"\"urn:schemas:httpmail:fromname\" LIKE '%{safe_term}%'",
+                            f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_term}%'"
+                        ]
                     sql_conditions.append("(" + " OR ".join(term_conditions) + ")")
                 
                 if match_all:
@@ -246,7 +262,7 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
         if not emails:
             return f"No emails found in {folder_display} from the last {days} days."
         
-        return f"Found {len(emails)} emails in {folder_display} from the last {days} days. Use view_email_cache(page=1) to view page #1 of first 5 emails."
+        return f"Found {len(emails)} emails. WAITING FOR USER INSTRUCTION - call view_email_cache() only when user requests to view emails."
     except Exception as e:
         return f"Error retrieving email titles: {str(e)}"
 
@@ -285,7 +301,7 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         if not emails:
             return f"No emails matching '{search_term}' found in {folder_display} from the last {days} days."
         
-        return f"Found {len(emails)} emails matching '{search_term}' in {folder_display} from the last {days} days. Use view_email_cache(page=1) to view page #1 of first 5 emails."
+        return f"Found {len(emails)} matching emails. WAITING FOR USER INSTRUCTION - call view_email_cache() only when user requests to view emails."
     except Exception as e:
         return f"Error searching emails: {str(e)}"
 
@@ -309,13 +325,16 @@ def view_email_cache(page: int = 1) -> str:
         email = email_cache[i]
         result += f"Email #{i}\n"
         result += f"Subject: {email['subject']}\n"
-        result += f"From: {email['sender']} <{email['sender_email']}>\n"
+        if email['sender_email'] != email['sender']:  # Has actual email (not Exchange format)
+            result += f"From: {email['sender']} <{email['sender_email']}>\n"
+        else:
+            result += f"From: {email['sender']}\n"
         result += f"Received: {email['received_time']}\n"
         result += f"Read Status: {'Read' if not email['unread'] else 'Unread'}\n"
         result += f"Has Attachments: {'Yes' if email['has_attachments'] else 'No'}\n\n"
     
     result += f"Use view_email_cache(page={page + 1}) to view next page." if page < total_pages else "This is the last page."
-    result += "\nTo view the full content of an email, use the get_email_by_number tool with the email number."
+    result += "\nIMPORTANT: WAIT FOR USER TO SPECIFY AN EMAIL NUMBER before calling get_email_by_number()."
     return result
 
 def get_email_by_number(email_number: int) -> str:

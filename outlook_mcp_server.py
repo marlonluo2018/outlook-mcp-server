@@ -15,11 +15,14 @@ def list_folders() -> str:
 def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
     """
     Get count of recent emails and load them into email cache.
-    Use view_email_cache to view basic email information.
+    Returns number of emails found.
     
     Args:
         days: Number of days to look back (default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox)
+
+    Note: After getting the count, call view_email_cache() to see email numbers
+          and details before using get_email_by_number().
     """
     return ops.list_recent_emails(days, folder_name)
 
@@ -27,7 +30,7 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
 def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = False) -> str:
     """
     Search emails and load matching ones into email cache.
-    Returns count of matches - use view_email_cache to view basic email information.
+    Returns count of matches.
     
     Args:
         search_term: Name or keyword to search for
@@ -40,6 +43,9 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
     - Treating quoted phrases as single terms (e.g., "project x")
     - Using spaces outside quotes to split terms
     - Applying AND/OR logic based on match_all parameter
+
+    Note: After getting the count, show the count to user and wait for their
+          explicit request before calling view_email_cache().
     """
     return ops.search_emails(search_term, days, folder_name, match_all)
 
@@ -47,7 +53,10 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
 def view_email_cache(page: int = 1) -> str:
     """
     View basic information of cached emails (5 emails per page).
-    Shows sender, subject, date - use get_email_by_number for full content.
+    Shows sender, subject, date.
+    
+    IMPORTANT: Only call this after user explicitly requests to view emails.
+    Only call get_email_by_number when user provides specific email number.
     
     Args:
         page: Page number to view (1-based, each page contains 5 emails)
