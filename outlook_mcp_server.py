@@ -35,6 +35,11 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         folder_name: Optional folder name to search (default: Inbox)
         match_all: If True, requires ALL search terms to match (AND logic).
                   If False, matches ANY search term (OR logic, default)
+
+    Note: Search terms with spaces are handled by:
+    - Treating quoted phrases as single terms (e.g., "project x")
+    - Using spaces outside quotes to split terms
+    - Applying AND/OR logic based on match_all parameter
     """
     return ops.search_emails(search_term, days, folder_name, match_all)
 

@@ -253,6 +253,11 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
 def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = False) -> str:
     """Search emails by contact name or keyword within a time period
     
+    Note: Search terms with spaces are handled by:
+    - Treating quoted phrases as single terms (e.g., "project x")
+    - Using spaces outside quotes to split terms
+    - Applying AND/OR logic based on match_all parameter
+    
     Args:
         search_term: Keywords to search for
         days: Number of days to search back (1-30)
