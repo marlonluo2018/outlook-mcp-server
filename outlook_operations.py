@@ -86,7 +86,7 @@ def clear_email_cache():
     global email_cache
     email_cache = {}
 
-def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None, match_all: bool = False):
+def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None, match_all: bool = True):
     """Get emails from a folder with optional search filter"""
     emails_list = []
     
@@ -266,7 +266,7 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
     except Exception as e:
         return f"Error retrieving email titles: {str(e)}"
 
-def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = False) -> str:
+def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True) -> str:
     """Search emails by contact name or keyword within a time period
     
     Note: Search terms with spaces are handled by:
@@ -278,8 +278,8 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         search_term: Keywords to search for
         days: Number of days to search back (1-30)
         folder_name: Optional folder name (default: Inbox)
-        match_all: If True, requires all keywords to match (AND logic)
-                   If False, matches any keyword (OR logic, default)
+        match_all: If True, requires all keywords to match (AND logic, default)
+                  If False, matches any keyword (OR logic)
     """
     if not search_term:
         return "Error: Please provide a search term"
@@ -301,7 +301,7 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         if not emails:
             return f"No emails matching '{search_term}' found in {folder_display} from the last {days} days."
         
-        return f"Found {len(emails)} matching emails. WAITING FOR USER INSTRUCTION - call view_email_cache() only when user requests to view emails."
+        return f"Found {len(emails)} matching emails. Call view_email_cache() to view emails."
     except Exception as e:
         return f"Error searching emails: {str(e)}"
 
@@ -334,7 +334,7 @@ def view_email_cache(page: int = 1) -> str:
         result += f"Has Attachments: {'Yes' if email['has_attachments'] else 'No'}\n\n"
     
     result += f"Use view_email_cache(page={page + 1}) to view next page." if page < total_pages else "This is the last page."
-    result += "\nIMPORTANT: WAIT FOR USER TO SPECIFY AN EMAIL NUMBER before calling get_email_by_number()."
+    result += "\nCall get_email_by_number() to get full content of the email."
     return result
 
 def get_email_by_number(email_number: int) -> str:
@@ -366,7 +366,7 @@ def get_email_by_number(email_number: int) -> str:
         
         result += "\nBody:\n"
         result += email_data['body']
-        result += "\n\nTo reply to this email, use the reply_to_email_by_number tool with this email number."
+        result += f"\n\nTo reply to this email, first confirm with the user. If approved, call: reply_to_email_by_number(email_number={email_number}, reply_text='your reply text')"
         return result
     except Exception as e:
         return f"Error retrieving email details: {str(e)}"

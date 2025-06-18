@@ -21,13 +21,12 @@ def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
         days: Number of days to look back (default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox)
 
-    Note: After getting the count, call view_email_cache() to see email numbers
-          and details before using get_email_by_number().
+
     """
     return ops.list_recent_emails(days, folder_name)
 
 @mcp.tool()
-def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = False) -> str:
+def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True) -> str:
     """
     Search emails and load matching ones into email cache.
     Returns count of matches.
@@ -36,16 +35,14 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         search_term: Name or keyword to search for
         days: Number of days to look back (default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox)
-        match_all: If True, requires ALL search terms to match (AND logic).
-                  If False, matches ANY search term (OR logic, default)
+        match_all: If True, requires ALL search terms to match (AND logic, default).
+                  If False, matches ANY search term (OR logic)
 
     Note: Search terms with spaces are handled by:
     - Treating quoted phrases as single terms (e.g., "project x")
     - Using spaces outside quotes to split terms
     - Applying AND/OR logic based on match_all parameter
 
-    Note: After getting the count, show the count to user and wait for their
-          explicit request before calling view_email_cache().
     """
     return ops.search_emails(search_term, days, folder_name, match_all)
 
@@ -82,6 +79,9 @@ def reply_to_email_by_number(
     cc_recipients: Optional[List[str]] = None
 ) -> str:
     """
+    IMPORTANT: You MUST get explicit user confirmation before calling this tool.
+    Never reply to an email without the user's direct approval.
+
     Reply to an email with custom recipients if provided
     
     Args:
@@ -95,6 +95,9 @@ def reply_to_email_by_number(
 @mcp.tool()
 def compose_email(recipient_email: str, subject: str, body: str, cc_email: Optional[str] = None) -> str:
     """
+    IMPORTANT: You MUST get explicit user confirmation before calling this tool.
+    Never send an email without the user's direct approval.
+
     Compose and send a new email
     
     Args:
