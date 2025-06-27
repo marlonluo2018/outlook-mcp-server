@@ -1,353 +1,410 @@
 import csv
-import datetime
+from datetime import datetime, timedelta
+import time
+import pythoncom
 import win32com.client
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Optional, Any
 
-# Constants
-MAX_DAYS = 30
+# Global configuration constants
+MAX_DAYS = 7
+MAX_EMAILS = 1000
+MAX_LOAD_TIME = 58  # seconds
 
-# Email cache for storing retrieved emails by number
+# Global email cache dictionary (key=EntryID, value=formatted email)
 email_cache = {}
 
-def connect_to_outlook():
-    """Connect to Outlook application using COM"""
-    try:
-        outlook = win32com.client.Dispatch("Outlook.Application")
-        namespace = outlook.GetNamespace("MAPI")
-        return outlook, namespace
-    except Exception as e:
-        raise Exception(f"Failed to connect to Outlook: {str(e)}")
-
-def get_folder_by_name(namespace, folder_name: str):
-    """Get a specific Outlook folder by name"""
-    try:
-        # First check inbox subfolder
-        inbox = namespace.GetDefaultFolder(6)  # 6 is the index for inbox folder
+class OutlookSessionManager:
+    """Context manager for Outlook COM session handling"""
+    def __init__(self):
+        self.outlook = None
+        self.namespace = None
+        self.folder = None
+        self._connected = False
         
-        # Check inbox subfolders first (most common)
-        for folder in inbox.Folders:
-            if folder.Name.lower() == folder_name.lower():
-                return folder
-                
-        # Then check all folders at root level
-        for folder in namespace.Folders:
-            if folder.Name.lower() == folder_name.lower():
-                return folder
+    def __enter__(self):
+        """Initialize Outlook COM objects"""
+        self._connect()
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Clean up COM objects"""
+        self._disconnect()
             
-            # Also check subfolders
-            for subfolder in folder.Folders:
-                if subfolder.Name.lower() == folder_name.lower():
-                    return subfolder
+    def _connect(self):
+        """Establish COM connection with proper threading"""
+        try:
+            # Ensure we're in STA mode for Outlook COM
+            if pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED) != 0:
+                pythoncom.CoUninitialize()
+                pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
+            
+            # Create Outlook instance with retry
+            for attempt in range(3):
+                try:
+                    self.outlook = win32com.client.Dispatch("Outlook.Application")
+                    self.namespace = self.outlook.GetNamespace("MAPI")
+                    self._connected = True
+                    return
+                except Exception as e:
+                    if attempt == 2:
+                        raise
+                    time.sleep(1)
                     
-        # If not found
+        except Exception as e:
+            self._connected = False
+            raise RuntimeError(f"Failed to connect to Outlook (HRESULT: {hex(e.hresult) if hasattr(e, 'hresult') else str(e)})")
+            
+    def _disconnect(self):
+        """Clean up COM objects"""
+        if self.folder:
+            del self.folder
+            self.folder = None
+        if self.namespace:
+            del self.namespace
+            self.namespace = None
+        if self.outlook:
+            del self.outlook
+            self.outlook = None
+        pythoncom.CoUninitialize()
+        self._connected = False
+        
+    def _ensure_connected(self):
+        """Verify connection or reconnect with retry"""
+        if not self._connected:
+            for attempt in range(3):
+                try:
+                    self._connect()
+                    return
+                except Exception as e:
+                    if attempt == 2:
+                        raise RuntimeError(f"Failed to reconnect after 3 attempts: {str(e)}")
+                    time.sleep(2 * (attempt + 1))  # Exponential backoff
+            
+    def get_folder(self, folder_name: Optional[str] = None):
+        """Get specified folder or default inbox"""
+        self._ensure_connected()
+        try:
+            if folder_name:
+                return self._get_folder_by_name(folder_name)
+            return self.namespace.GetDefaultFolder(6)  # Inbox
+        except Exception as e:
+            self._connected = False
+            raise RuntimeError(f"Failed to access folder: {str(e)}")
+        
+    def _get_folder_by_name(self, folder_name: str):
+        """Find folder by name in folder hierarchy"""
+        self._ensure_connected()
+        try:
+            inbox = self.namespace.GetDefaultFolder(6)
+            
+            # Check inbox subfolders first
+            for folder in inbox.Folders:
+                if folder.Name.lower() == folder_name.lower():
+                    return folder
+                    
+            # Check all folders at root level
+            for folder in self.namespace.Folders:
+                if folder.Name.lower() == folder_name.lower():
+                    return folder
+                    
+                # Check subfolders
+                for subfolder in folder.Folders:
+                    if subfolder.Name.lower() == folder_name.lower():
+                        return subfolder
+        except Exception as e:
+            self._connected = False
+            raise RuntimeError(f"Failed to find folder: {str(e)}")
         return None
-    except Exception as e:
-        raise Exception(f"Failed to access folder {folder_name}: {str(e)}")
 
 def format_email(mail_item) -> Dict[str, Any]:
     """Format an Outlook mail item into a structured dictionary"""
     try:
-        # Extract recipients
-        recipients = []
-        if mail_item.Recipients:
+        if isinstance(mail_item, dict):
+            # Handle already formatted emails from cache
+            if 'to_recipients' in mail_item and 'cc_recipients' in mail_item:
+                # Already properly formatted - return as-is
+                return mail_item
+            elif 'recipients' in mail_item:
+                # Convert recipients format to match our expected structure
+                to_recipients = []
+                cc_recipients = []
+                
+                for recipient in mail_item['recipients']:
+                    if 'name' in recipient:
+                        name = recipient['name'].strip()
+                        if 'type' in recipient and recipient['type'] == 2:  # CC recipient
+                            cc_recipients.append({'name': name})
+                        else:  # Default to To recipient
+                            to_recipients.append({'name': name})
+                
+                return {
+                    **mail_item,
+                    'to_recipients': to_recipients,
+                    'cc_recipients': cc_recipients
+                }
+            return mail_item
+            
+        # Get To and CC recipients separately (store emails but don't display)
+        to_recipients = []
+        cc_recipients = []
+        if hasattr(mail_item, 'Recipients') and mail_item.Recipients:
             for i in range(1, mail_item.Recipients.Count + 1):
-                recipient = mail_item.Recipients(i)
-                try:
-                    if not recipient.Address.startswith('/o='):
-                        # Regular email format
-                        recipients.append(f"{recipient.Name} <{recipient.Address}>")
-                    else:
-                        # Exchange directory format - just show name
-                        recipients.append(f"{recipient.Name}")
-                except:
-                    recipients.append(f"{recipient.Name}")
+                recipient = mail_item.Recipients.Item(i)
+                if recipient.Type == 1:  # olTo
+                    to_recipients.append({'name': recipient.Name})
+                elif recipient.Type == 2:  # olCC
+                    cc_recipients.append({'name': recipient.Name})
         
-        # Get email body - handle HTML emails
-        body = mail_item.HTMLBody if hasattr(mail_item, 'HTMLBody') and mail_item.HTMLBody else mail_item.Body
-        if body and hasattr(mail_item, 'HTMLBody') and mail_item.HTMLBody:
-            # For HTML emails, replace newlines with <br> tags
-            body = body.replace('\n\n', '<br>').replace('\n', '<br>')
-        
-        # Format the email data
-        email_data = {
+        # Fallback for direct To recipients if none found
+        if not to_recipients and hasattr(mail_item, 'To'):
+            to_recipients = [{'name': name.strip()} for name in mail_item.To.split(';') if name.strip()]
+            
+        return {
             "id": mail_item.EntryID,
-            "conversation_id": mail_item.ConversationID if hasattr(mail_item, 'ConversationID') else None,
-            "subject": mail_item.Subject,
-            "sender": mail_item.SenderName,
-            "sender_email": mail_item.SenderName if mail_item.SenderEmailAddress.startswith('/o=') else mail_item.SenderEmailAddress,
-            "received_time": mail_item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if mail_item.ReceivedTime else None,
-            "recipients": recipients,
-            "body": body,
-            "has_attachments": mail_item.Attachments.Count > 0,
-            "attachment_count": mail_item.Attachments.Count if hasattr(mail_item, 'Attachments') else 0,
-            "unread": mail_item.UnRead if hasattr(mail_item, 'UnRead') else False,
-            "importance": mail_item.Importance if hasattr(mail_item, 'Importance') else 1,
-            "categories": mail_item.Categories if hasattr(mail_item, 'Categories') else ""
+            "subject": getattr(mail_item, 'Subject', 'No Subject'),
+            "sender": getattr(mail_item, 'SenderName', 'Unknown Sender'),
+            "received_time": mail_item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if hasattr(mail_item, 'ReceivedTime') and mail_item.ReceivedTime else None,
+            "to_recipients": to_recipients,
+            "cc_recipients": cc_recipients,
+            "has_attachments": getattr(mail_item, 'Attachments', 0).Count > 0
         }
-        return email_data
     except Exception as e:
         raise Exception(f"Failed to format email: {str(e)}")
 
-def clear_email_cache():
-    """Clear the email cache"""
-    global email_cache
-    email_cache = {}
 
-def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None, match_all: bool = True):
-    """Get emails from a folder with optional search filter"""
-    emails_list = []
-    
-    # Calculate the date threshold
-    now = datetime.datetime.now()
-    threshold_date = now - datetime.timedelta(days=days)
-    
-    try:
-        # Set up filtering
-        folder_items = folder.Items
-        folder_items.Sort("[ReceivedTime]", True)  # Sort by received time, newest first
-        
-        # If we have a search term, apply it
-        if search_term:
-            print(f"\nDEBUG: Applying search filter for term: {search_term}")
-            print(f"DEBUG: match_all mode: {match_all}")
-            
-            # Parse search terms preserving quoted phrases
-            search_terms = []
-            in_quote = False
-            current_term = ""
-            
-            for char in search_term:
-                if char == '"':
-                    if in_quote:
-                        # End of quoted term
-                        if current_term:
-                            search_terms.append(current_term)
-                        current_term = ""
-                    in_quote = not in_quote
-                elif char == " " and not in_quote:
-                    # Space outside quote - split term
-                    if current_term:
-                        search_terms.append(current_term)
-                    current_term = ""
-                else:
-                    current_term += char
-            
-            # Add any remaining term
-            if current_term:
-                search_terms.append(current_term)
-            
-            # Remove empty terms and clean up
-            search_terms = [term.strip() for term in search_terms if term.strip()]
-            
-            # Try to create a filter for subject, sender name or body
-            try:
-                print(f"DEBUG: Building SQL filter for terms: {search_terms}")
-                # Build SQL filter based on match_all mode
-                sql_conditions = []
-                for term in search_terms:
-                    # Escape single quotes for SQL
-                    safe_term = term.replace("'", "''")
-                    
-                    # Check if term was originally quoted (contains space)
-                    if ' ' in term:
-                        # Exact match for quoted phrases
-                        term_conditions = [
-                            f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_term}%'",  # Changed from = to LIKE
-                            f"\"urn:schemas:httpmail:fromname\" LIKE '%{safe_term}%'",
-                            f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_term}%'"
-                        ]
-                    else:
-                        # Partial word match for single terms
-                        term_conditions = [
-                            f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_term}%'",
-                            f"\"urn:schemas:httpmail:fromname\" LIKE '%{safe_term}%'",
-                            f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_term}%'"
-                        ]
-                    sql_conditions.append("(" + " OR ".join(term_conditions) + ")")
-                
-                if match_all and len(search_terms) > 1:
-                    filter_term = f"@SQL=" + " AND ".join(sql_conditions)
-                else:
-                    filter_term = f"@SQL=" + " OR ".join(sql_conditions)
-                print(f"DEBUG: SQL filter term: {filter_term}")
-                print(f"DEBUG: Parsed search terms: {search_terms}")
-                folder_items = folder_items.Restrict(filter_term)
-                print("DEBUG: SQL filter applied successfully")
-            except Exception as e:
-                print(f"DEBUG: SQL filter failed, falling back to manual filter: {str(e)}")
-                # If filtering fails, we'll do manual filtering later
-        
-        # Process emails
-        count = 0
-        for item in folder_items:
-            try:
-                if hasattr(item, 'ReceivedTime') and item.ReceivedTime:
-                    # Convert to naive datetime for comparison
-                    received_time = item.ReceivedTime.replace(tzinfo=None)
-                    
-                    # Skip emails older than our threshold
-                    if received_time < threshold_date:
-                        continue
-                    
-                    # Manual search filter if needed
-                    if search_term and folder_items == folder.Items:  # If we didn't apply filter earlier
-                        # Split search terms (support both space and OR separator)
-                        search_terms = []
-                        for part in search_term.split(" OR "):
-                            search_terms.extend(part.strip().lower().split())
-                        search_terms = [term for term in search_terms if term]
-                        
-                        # Check matches based on mode
-                        if match_all:
-                            # All terms must match somewhere
-                            found_match = all(
-                                any(term in field.lower() for field in [
-                                    item.Subject,
-                                    item.SenderName,
-                                    item.Body
-                                ])
-                                for term in search_terms
-                            )
-                        else:
-                            # Any term can match anywhere
-                            found_match = any(
-                                term in field.lower()
-                                for term in search_terms
-                                for field in [item.Subject, item.SenderName, item.Body]
-                            )
-                        
-                        if not found_match:
-                            continue
-                    
-                    # Format and add the email
-                    email_data = format_email(item)
-                    emails_list.append(email_data)
-                    count += 1
-            except Exception as e:
-                print(f"Warning: Error processing email: {str(e)}")
-                continue
-                
-    except Exception as e:
-        print(f"Error retrieving emails: {str(e)}")
-        
-    return emails_list
-def list_folders() -> str:
-    """List all available mail folders in Outlook"""
-    try:
-        _, namespace = connect_to_outlook()
-        result = "Available mail folders:\n\n"
-        for folder in namespace.Folders:
-            result += f"- {folder.Name}\n"
-            for subfolder in folder.Folders:
-                result += f"  - {subfolder.Name}\n"
-                try:
-                    for subsubfolder in subfolder.Folders:
-                        result += f"    - {subsubfolder.Name}\n"
-                except:
-                    pass
-        return result
-    except Exception as e:
-        return f"Error listing mail folders: {str(e)}"
-
-def list_recent_emails(days: int = 7, folder_name: Optional[str] = None) -> str:
-    """List email titles from the specified number of days"""
-    if not isinstance(days, int) or days < 1 or days > MAX_DAYS:
-        return f"Error: 'days' must be an integer between 1 and {MAX_DAYS}"
-    
-    try:
-        _, namespace = connect_to_outlook()
-        folder = get_folder_by_name(namespace, folder_name) if folder_name else namespace.GetDefaultFolder(6)
-        if not folder:
-            return f"Error: Folder '{folder_name}' not found"
-        
-        clear_email_cache()
-        emails = get_emails_from_folder(folder, days)
-        for i, email in enumerate(emails, 1):
-            email_cache[i] = email
-        
-        folder_display = f"'{folder_name}'" if folder_name else "Inbox"
-        if not emails:
-            return f"No emails found in {folder_display} from the last {days} days."
-        
-        return f"Found {len(emails)} emails. WAITING FOR USER INSTRUCTION - call view_email_cache() only when user requests to view emails."
-    except Exception as e:
-        return f"Error retrieving email titles: {str(e)}"
-
-def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True) -> str:
-    """Search emails by contact name or keyword within a time period
-    
-    Note: Search terms with spaces are handled by:
-    - Treating quoted phrases as single terms (e.g., "project x")
-    - Using spaces outside quotes to split terms
-    - Applying AND/OR logic based on match_all parameter
+def get_emails_from_folder(
+    folder_name: Optional[str] = None,
+    days: int = 7,
+    search_term: Optional[str] = None,
+    batch_size: int = 50
+) -> List[Dict]:
+    """
+    Retrieve emails from specified folder with batch processing and timeout
     
     Args:
-        search_term: Keywords to search for
-        days: Number of days to search back (1-30)
-        folder_name: Optional folder name (default: Inbox)
-        match_all: If True, requires all keywords to match (AND logic, default)
-                   If False, matches any keyword (OR logic)
+        folder_name: Name of folder to search (None for inbox)
+        days: Number of days to look back
+        search_term: Optional search filter
+        batch_size: Number of emails to process per batch (50-200 recommended)
+        max_runtime: Maximum processing time in seconds
+        max_emails: Maximum number of emails to return (0 for unlimited)
+        
+    Returns:
+        List of formatted email dictionaries
     """
-    print(f"\nDEBUG: Starting search for: '{search_term}' (match_all={match_all})")
-    if not search_term:
-        return "Error: Please provide a search term"
-    if not isinstance(days, int) or days < 1 or days > MAX_DAYS:
-        return f"Error: 'days' must be an integer between 1 and {MAX_DAYS}"
+    global email_cache
+    emails = []
+    start_time = time.time()
+    max_retries = 2
+    retry_count = 0
     
-    try:
-        _, namespace = connect_to_outlook()
-        folder = get_folder_by_name(namespace, folder_name) if folder_name else namespace.GetDefaultFolder(6)
-        if not folder:
-            return f"Error: Folder '{folder_name}' not found"
-        
-        clear_email_cache()
-        emails = get_emails_from_folder(folder, days, search_term, match_all)
-        for i, email in enumerate(emails, 1):
-            email_cache[i] = email
-        
-        folder_display = f"'{folder_name}'" if folder_name else "Inbox"
-        if not emails:
-            return f"No emails matching '{search_term}' found in {folder_display} from the last {days} days."
-        
-        print(f"\nDEBUG: Found {len(emails)} matching emails")
-        # Custom return format showing count and first page
-        result = f"Found {len(emails)} matching emails.\n\n"
-        result += "Below are the first 5 emails from email cache page 1:\n"
-        result += view_email_cache(1)
-        return result
-    except Exception as e:
-        return f"Error searching emails: {str(e)}"
+    with OutlookSessionManager() as session:
+        while retry_count <= max_retries:
+            try:
+                try:
+                    folder = session.get_folder(folder_name)
+                    if not folder:
+                        print(f"Folder '{folder_name or 'Inbox'}' not found")
+                        return []
+                except RuntimeError as e:
+                    print(f"Connection error (attempt {retry_count + 1}/{max_retries}): {str(e)}")
+                    if retry_count == max_retries:
+                        raise RuntimeError(f"Failed after {max_retries} retries")
+                    time.sleep(3 * (retry_count + 1))
+                    retry_count += 1
+                    continue
+                    
+                folder_items = folder.Items
+                folder_items.Sort("[ReceivedTime]", True)
+                
+                # Filter by date range first to reduce processing
+                threshold_date = datetime.now() - timedelta(days=days)
+                folder_items = folder_items.Restrict(
+                    f"[ReceivedTime] >= '{threshold_date.strftime('%m/%d/%Y %H:%M %p')}'"
+                )
+                
+                if search_term:
+                    folder_items = _apply_search_filter(folder_items, search_term)
+                
+                total_items = min(folder_items.Count, 10000)  # Safety limit
+                
+                # Process in batches with timeout and max emails check
+                pythoncom.CoInitialize()
+                try:
+                    for batch_start in range(1, total_items + 1, batch_size):
+                        limit_reached = ""
+                        if time.time() - start_time > MAX_LOAD_TIME:
+                            limit_reached = " (MAX_LOAD_TIME reached)"
+                        elif len(emails) >= MAX_EMAILS:
+                            limit_reached = " (MAX_EMAILS reached)"
+                        
+                        if limit_reached:
+                            print(f"Processing completed{limit_reached}")
+                            return emails[:MAX_EMAILS], limit_reached
+                            
+                        batch_end = min(batch_start + batch_size - 1, total_items)
+                        batch_emails = []
+                        for i in range(batch_start, batch_end + 1):
+                            try:
+                                item = folder_items.Item(i)
+                                if item.Class != 43:  # Skip non-mail items
+                                    continue
+                                    
+                                email_data = {
+                                    'id': getattr(item, 'EntryID', ''),
+                                    'subject': getattr(item, 'Subject', 'No Subject'),
+                                    'sender': getattr(item, 'SenderName', 'Unknown Sender'),
+                                    'sender_email': getattr(item, 'SenderEmailAddress', ''),
+                                    'received_time': str(getattr(item, 'ReceivedTime', '')),
+                                    'date': str(getattr(item, 'ReceivedTime', '')),  # Backward compat
+                                    'unread': getattr(item, 'UnRead', False),
+                                    'has_attachments': getattr(item, 'Attachments', False).Count > 0,
+                                    'size': getattr(item, 'Size', 0),
+                                    'body': getattr(item, 'Body', '')[:1000],
+                                    'recipients': [
+                                        {
+                                            'name': getattr(recipient, 'Name', ''),
+                                            'address': getattr(recipient, 'Address', '').split('/')[-1],
+                                            'type': getattr(recipient, 'Type', 1)  # 1=To, 2=CC
+                                        }
+                                        for recipient in getattr(item, 'Recipients', [])
+                                        if hasattr(recipient, 'Address') or hasattr(recipient, 'Name')
+                                    ]
+                                }
+                                
+                                batch_emails.append(email_data)
+                                
+                            except Exception as e:
+                                print(f"Error processing email {i}: {str(e)}")
+                                continue
+                                
+                        formatted_batch = [format_email(email) for email in batch_emails]
+                        emails.extend(formatted_batch)
+                        # Add formatted emails to cache
+                        for email in formatted_batch:
+                            if 'id' in email and email['id']:
+                                email_cache[email['id']] = email
+                finally:
+                    pythoncom.CoUninitialize()
+                
+                limit_note = " (MAX_EMAILS reached)" if len(emails) > MAX_EMAILS else ""
+                return emails[:MAX_EMAILS], limit_note
+                
+            except Exception as e:
+                print(f"Error processing batch (attempt {retry_count + 1}): {str(e)}")
+                retry_count += 1
+                if retry_count > max_retries:
+                    raise
 
-def view_email_cache(page: int = 1) -> str:
-    """View emails from cache in pages of 5"""
+def _apply_search_filter(folder_items, search_term: str):
+    """Apply search filter to folder items"""
+    try:
+        filter_term = f"@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{search_term}%'"
+        return folder_items.Restrict(filter_term)
+    except Exception as e:
+        print(f"Warning: Could not apply search filter - {str(e)}")
+        return folder_items
+
+def list_folders() -> List[str]:
+    """List all available mail folders"""
+    with OutlookSessionManager() as session:
+        folders = []
+        for folder in session.namespace.Folders:
+            folders.append(folder.Name)
+            for subfolder in folder.Folders:
+                folders.append(f"  {subfolder.Name}")
+        return folders
+
+def list_recent_emails(days: int = MAX_DAYS, folder_name: Optional[str] = None) -> str:
+    """Get count of recent emails and cache formatted emails"""
+    if days > MAX_DAYS:
+        actual_days = MAX_DAYS
+        note = " (limited to MAX_DAYS for performance)"
+    else:
+        actual_days = days
+        note = ""
+    
+    email_cache.clear()
+    emails, limit_note = get_emails_from_folder(folder_name, actual_days)
+    if not emails:
+        return f"No emails found in the last {actual_days} days{note}{limit_note}"
+    
+    for mail in emails:
+        if mail.get('id'):
+            # Store original mail data without reformatting
+            email_cache[mail['id']] = mail
+    return f"Found {len(emails)} emails from last {actual_days} days{note}{limit_note}. Use 'view_email_cache' to view them."
+
+def search_emails(search_term: str, days: int = MAX_DAYS, folder_name: Optional[str] = None,
+                 match_all: bool = True) -> str:
+    """Search emails by term and cache formatted emails"""
+    if days > MAX_DAYS:
+        actual_days = MAX_DAYS
+        note = " (limited to MAX_DAYS for performance)"
+    else:
+        actual_days = days
+        note = ""
+    
+    email_cache.clear()
+    emails, limit_note = get_emails_from_folder(folder_name, actual_days, search_term)
+    if not emails:
+        return f"No emails found matching '{search_term}' in the last {actual_days} days{note}{limit_note}"
+    
+    for mail in emails:
+        if mail.get('id'):
+            # Store original mail data without reformatting
+            email_cache[mail['id']] = mail
+    return f"Found {len(emails)} matching emails from last {actual_days} days{note}{limit_note}. Use 'view_email_cache' to view them."
+
+def view_email_cache(page: int = 1, per_page: int = 5) -> str:
+    """
+    View emails from cache with pagination and detailed info
+    
+    Returns:
+        str: Formatted email previews as string
+    """
     if not email_cache:
         return "Error: No emails in cache. Please use list_recent_emails or search_emails first."
     if not isinstance(page, int) or page < 1:
         return "Error: 'page' must be a positive integer"
     
-    total_emails = len(email_cache)
-    total_pages = (total_emails + 4) // 5
+    cache_items = list(email_cache.values())
+    total_emails = len(cache_items)
+    total_pages = (total_emails + per_page - 1) // per_page
+    
     if page > total_pages:
         return f"Error: Page {page} does not exist. There are only {total_pages} pages."
     
-    start_idx = (page - 1) * 5 + 1
-    end_idx = min(page * 5, total_emails)
+    start_idx = (page - 1) * per_page
+    end_idx = min(page * per_page, total_emails)
     
-    result = f"Showing emails {start_idx}-{end_idx} of {total_emails} (Page {page}/{total_pages}):\n\n"
-    for i in range(start_idx, end_idx + 1):
-        email = email_cache[i]
-        result += f"Email #{i}\n"
+    result = f"Showing emails {start_idx + 1}-{end_idx} of {total_emails} (Page {page}/{total_pages}):\n\n"
+    for i in range(start_idx, end_idx):
+        email = cache_items[i]
+        result += f"Email #{i + 1}\n"
         result += f"Subject: {email['subject']}\n"
-        if email['sender_email'] != email['sender']:  # Has actual email (not Exchange format)
-            result += f"From: {email['sender']} <{email['sender_email']}>\n"
-        else:
-            result += f"From: {email['sender']}\n"
+        
+        # Display sender name only (like CC field)
+        sender_name = email['sender'].split('/')[0].strip()
+        result += f"From: {sender_name}\n"
+        
+        # Display TO recipients if available
+        if email.get('to_recipients'):
+            to_names = [r.get('name', '') for r in email['to_recipients']]
+            result += f"To: {', '.join(to_names)}\n"
+        
+        # Display CC recipients if available
+        if email.get('cc_recipients'):
+            cc_names = [r.get('name', '') for r in email['cc_recipients']]
+            result += f"Cc: {', '.join(cc_names)}\n"
+        
         result += f"Received: {email['received_time']}\n"
-        result += f"Read Status: {'Read' if not email['unread'] else 'Unread'}\n"
-        result += f"Has Attachments: {'Yes' if email['has_attachments'] else 'No'}\n\n"
+        result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
+        result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
     
     result += f"Use view_email_cache(page={page + 1}) to view next page." if page < total_pages else "This is the last page."
     result += "\nCall get_email_by_number() to get full content of the email."
+    
     return result
 
 def get_email_by_number(email_number: int) -> str:
@@ -355,30 +412,58 @@ def get_email_by_number(email_number: int) -> str:
     try:
         if not email_cache:
             return "Error: No emails have been listed yet. Please use list_recent_emails or search_emails first."
-        if email_number not in email_cache:
+            
+        # Get email by sequential index (just for validation)
+        cache_items = list(email_cache.values())
+        if not 1 <= email_number <= len(cache_items):
             return f"Error: Email #{email_number} not found in the current listing."
+            
+        with OutlookSessionManager() as session:
+            email = session.namespace.GetItemFromID(cache_items[email_number - 1]["id"])
+            if not email:
+                return f"Error: Email #{email_number} could not be retrieved from Outlook."
+            
+            # Get fresh data directly from Outlook
+            subject = getattr(email, 'Subject', 'No Subject')
+            sender = getattr(email, 'SenderName', 'Unknown Sender')
+            sender_email = getattr(email, 'SenderEmailAddress', 'Unknown').split('/')[-1]
+            if sender_email.startswith('CN='):
+                sender_email = sender_email.split('=')[-1]
+            received_time = getattr(email, 'ReceivedTime', '').strftime("%Y-%m-%d %H:%M:%S") if hasattr(email, 'ReceivedTime') else ''
+            
+            result = f"Email #{email_number} Details:\n\n"
+            result += f"Subject: {subject}\n"
+            result += f"From: {sender} <{sender_email}>\n"
+            result += f"Received: {received_time}\n"
+            
+            # Get clean To recipients
+            to_recipients = []
+            for i in range(1, email.Recipients.Count + 1):
+                recipient = email.Recipients.Item(i)
+                if recipient.Type == 1:  # 1 = olTo
+                    to_recipients.append(f"{recipient.Name} <{recipient.Address.split('/')[-1]}>")
+            
+            # Get clean CC recipients
+            cc_recipients = []
+            for i in range(1, email.Recipients.Count + 1):
+                recipient = email.Recipients.Item(i)
+                if recipient.Type == 2:  # 2 = olCC
+                    cc_recipients.append(f"{recipient.Name} <{recipient.Address.split('/')[-1]}>")
+            
+            result += f"To: {', '.join(to_recipients)}\n"
+            if cc_recipients:
+                result += f"Cc: {', '.join(cc_recipients)}\n"
         
-        email_data = email_cache[email_number]
-        _, namespace = connect_to_outlook()
-        email = namespace.GetItemFromID(email_data["id"])
-        if not email:
-            return f"Error: Email #{email_number} could not be retrieved from Outlook."
+        result += f"Has Attachments: {'Yes' if getattr(email, 'Attachments', False).Count > 0 else 'No'}\n"
         
-        result = f"Email #{email_number} Details:\n\n"
-        result += f"Subject: {email_data['subject']}\n"
-        result += f"From: {email_data['sender']} <{email_data['sender_email']}>\n"
-        result += f"Received: {email_data['received_time']}\n"
-        result += f"Recipients: {', '.join(email_data['recipients'])}\n"
-        result += f"Has Attachments: {'Yes' if email_data['has_attachments'] else 'No'}\n"
-        
-        if email_data['has_attachments']:
+        if getattr(email, 'Attachments', False).Count > 0:
             result += "Attachments:\n"
             for i in range(1, email.Attachments.Count + 1):
                 attachment = email.Attachments(i)
                 result += f"  - {attachment.FileName}\n"
         
         result += "\nBody:\n"
-        result += email_data['body']
+        result += getattr(email, 'Body', 'No body content')
         result += f"\n\nTo reply to this email, first confirm with the user. If approved, call: reply_to_email_by_number(email_number={email_number}, reply_text='your reply text')"
         return result
     except Exception as e:
@@ -394,13 +479,14 @@ def reply_to_email_by_number(
     try:
         if not email_cache:
             return "No emails available - please list emails first."
-        if email_number not in email_cache:
+            
+        cache_items = list(email_cache.values())
+        if not 1 <= email_number <= len(cache_items):
             return f"Email #{email_number} not found in current listing."
         
-        email_id = email_cache[email_number]["id"]
-        outlook, namespace = connect_to_outlook()
-        try:
-            email = namespace.GetItemFromID(email_id)
+        email_id = cache_items[email_number - 1]["id"]
+        with OutlookSessionManager() as session:
+            email = session.namespace.GetItemFromID(email_id)
             if not email:
                 return "Could not retrieve the email from Outlook."
             
@@ -455,16 +541,11 @@ def reply_to_email_by_number(
             
             reply.Send()
             return "Reply sent successfully."
-        except Exception as e:
-            return "Failed to send reply - please try again."
-        finally:
-            email = None
-            namespace = None
-            outlook = None
     except Exception as e:
-        return "An error occurred while processing your request."
+        return f"Failed to send reply: {str(e)}"
 
-def compose_email(to_recipients: List[str], subject: str, body: str, cc_recipients: Optional[List[str]] = None) -> str:
+def compose_email(to_recipients: List[str], subject: str, body: str,
+                 cc_recipients: Optional[List[str]] = None) -> str:
     """Compose and send a new email using Outlook COM API
     
     Args:
@@ -477,29 +558,28 @@ def compose_email(to_recipients: List[str], subject: str, body: str, cc_recipien
         str: Success/error message
     """
     try:
-        outlook, _ = connect_to_outlook()
-        mail = outlook.CreateItem(0)  # 0 = olMailItem
-        
-        mail.To = "; ".join(to_recipients)
-        mail.Subject = subject
-        
-        # Detect HTML content and handle appropriately
-        if any(tag in body.lower() for tag in ['<div>', '<p>', '<br>', '<html>']):
-            # For HTML content, replace newlines with <br> and set HTMLBody
-            html_body = body.replace('\n\n', '<br>').replace('\n', '<br>')
-            mail.HTMLBody = html_body
-        else:
-            # Plain text content
-            mail.Body = body
-        
-        if cc_recipients:
-            mail.CC = "; ".join(cc_recipients)
+        with OutlookSessionManager() as session:
+            mail = session.outlook.CreateItem(0)  # 0 = olMailItem
             
-        mail.Send()
-        return "Email sent successfully"
+            mail.To = "; ".join(to_recipients)
+            mail.Subject = subject
+            
+            # Detect HTML content and handle appropriately
+            if any(tag in body.lower() for tag in ['<div>', '<p>', '<br>', '<html>']):
+                # For HTML content, replace newlines with <br> and set HTMLBody
+                html_body = body.replace('\n\n', '<br>').replace('\n', '<br>')
+                mail.HTMLBody = html_body
+            else:
+                # Plain text content
+                mail.Body = body
+            
+            if cc_recipients:
+                mail.CC = "; ".join(cc_recipients)
+                
+            mail.Send()
+            return "Email sent successfully"
     except Exception as e:
         return f"Failed to send email: {str(e)}"
-
 
 def send_batch_emails(email_number: int, csv_path: str, custom_text: str = "") -> str:
     """Send email to recipients in batches of 500 (Outlook BCC limit)
@@ -537,29 +617,28 @@ def send_batch_emails(email_number: int, csv_path: str, custom_text: str = "") -
         batches = [recipients[i:i + batch_size] for i in range(0, total_recipients, batch_size)]
         
         results = []
-        outlook, _ = connect_to_outlook()
-        
-        for i, batch in enumerate(batches, 1):
-            try:
-                mail = outlook.CreateItem(0)  # 0 = olMailItem
-                
-                # Set BCC recipients
-                mail.BCC = "; ".join(batch)
-                mail.Subject = template['subject']
-                
-                # Prepare body with custom text
-                body = f"{custom_text}\n\n{template['body']}"
-                
-                if any(tag in body.lower() for tag in ['<div>', '<p>', '<br>', '<html>']):
-                    mail.HTMLBody = body.replace('\n\n', '<br>').replace('\n', '<br>')
-                else:
-                    mail.Body = body
-                
-                mail.Send()
-                results.append(f"Batch {i} ({len(batch)} emails) sent successfully")
-            except Exception as e:
-                results.append(f"Error sending batch {i}: {str(e)}")
-                
+        with OutlookSessionManager() as session:
+            for i, batch in enumerate(batches, 1):
+                try:
+                    mail = session.outlook.CreateItem(0)  # 0 = olMailItem
+                    
+                    # Set BCC recipients
+                    mail.BCC = "; ".join(batch)
+                    mail.Subject = template['subject']
+                    
+                    # Prepare body with custom text
+                    body = f"{custom_text}\n\n{template['body']}"
+                    
+                    if any(tag in body.lower() for tag in ['<div>', '<p>', '<br>', '<html>']):
+                        mail.HTMLBody = body.replace('\n\n', '<br>').replace('\n', '<br>')
+                    else:
+                        mail.Body = body
+                    
+                    mail.Send()
+                    results.append(f"Batch {i} ({len(batch)} emails) sent successfully")
+                except Exception as e:
+                    results.append(f"Error sending batch {i}: {str(e)}")
+                    
         return "\n".join([
             f"Batch sending completed for {total_recipients} recipients in {len(batches)} batches:",
             *results
