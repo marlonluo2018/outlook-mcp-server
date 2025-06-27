@@ -32,18 +32,24 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
     Returns count of matches.
     
     Args:
-        search_term: Name or keyword to search for
+        search_term: Plain text search term (no field prefixes allowed)
         days: Number of days to look back (default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox)
         match_all: If True, requires ALL search terms to match (AND logic, default).
                   If False, matches ANY search term (OR logic)
 
-    Note: Search terms with spaces are handled by:
-    - Treating quoted phrases as single terms (e.g., "project x")
-    - Using spaces outside quotes to split terms
-    - Applying AND/OR logic based on match_all parameter
-
+    Note:
+    - Search terms with spaces are handled by:
+      * Treating quoted phrases as single terms (e.g., "project x")
+      * Using spaces outside quotes to split terms
+      * Applying AND/OR logic based on match_all parameter
+    - Field-specific searches (like subject:) are not supported
+    - For subject searches, use the subject parameter in search_emails directly
     """
+    if ':' in search_term:
+        raise ValueError("Field-specific searches (using ':') are not supported. "
+                       "Use plain text search terms only.")
+    
     return ops.search_emails(search_term, days, folder_name, match_all)
 
 @mcp.tool()

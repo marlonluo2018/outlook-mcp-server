@@ -1,3 +1,4 @@
+import csv
 import datetime
 import win32com.client
 from typing import List, Optional, Dict, Any
@@ -61,6 +62,12 @@ def format_email(mail_item) -> Dict[str, Any]:
                 except:
                     recipients.append(f"{recipient.Name}")
         
+        # Get email body - handle HTML emails
+        body = mail_item.HTMLBody if hasattr(mail_item, 'HTMLBody') and mail_item.HTMLBody else mail_item.Body
+        if body and hasattr(mail_item, 'HTMLBody') and mail_item.HTMLBody:
+            # For HTML emails, replace newlines with <br> tags
+            body = body.replace('\n\n', '<br>').replace('\n', '<br>')
+        
         # Format the email data
         email_data = {
             "id": mail_item.EntryID,
@@ -70,7 +77,7 @@ def format_email(mail_item) -> Dict[str, Any]:
             "sender_email": mail_item.SenderName if mail_item.SenderEmailAddress.startswith('/o=') else mail_item.SenderEmailAddress,
             "received_time": mail_item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if mail_item.ReceivedTime else None,
             "recipients": recipients,
-            "body": mail_item.Body,
+            "body": body,
             "has_attachments": mail_item.Attachments.Count > 0,
             "attachment_count": mail_item.Attachments.Count if hasattr(mail_item, 'Attachments') else 0,
             "unread": mail_item.UnRead if hasattr(mail_item, 'UnRead') else False,
@@ -145,9 +152,9 @@ def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None,
                     if ' ' in term:
                         # Exact match for quoted phrases
                         term_conditions = [
-                            f"\"urn:schemas:httpmail:subject\" = '{safe_term}'",
-                            f"\"urn:schemas:httpmail:fromname\" = '{safe_term}'",
-                            f"\"urn:schemas:httpmail:textdescription\" = '{safe_term}'"
+                            f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_term}%'",  # Changed from = to LIKE
+                            f"\"urn:schemas:httpmail:fromname\" LIKE '%{safe_term}%'",
+                            f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_term}%'"
                         ]
                     else:
                         # Partial word match for single terms
@@ -158,7 +165,7 @@ def get_emails_from_folder(folder, days: int, search_term: Optional[str] = None,
                         ]
                     sql_conditions.append("(" + " OR ".join(term_conditions) + ")")
                 
-                if match_all:
+                if match_all and len(search_terms) > 1:
                     filter_term = f"@SQL=" + " AND ".join(sql_conditions)
                 else:
                     filter_term = f"@SQL=" + " OR ".join(sql_conditions)
@@ -279,8 +286,9 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         days: Number of days to search back (1-30)
         folder_name: Optional folder name (default: Inbox)
         match_all: If True, requires all keywords to match (AND logic, default)
-                  If False, matches any keyword (OR logic)
+                   If False, matches any keyword (OR logic)
     """
+    print(f"\nDEBUG: Starting search for: '{search_term}' (match_all={match_all})")
     if not search_term:
         return "Error: Please provide a search term"
     if not isinstance(days, int) or days < 1 or days > MAX_DAYS:
@@ -301,7 +309,12 @@ def search_emails(search_term: str, days: int = 7, folder_name: Optional[str] = 
         if not emails:
             return f"No emails matching '{search_term}' found in {folder_display} from the last {days} days."
         
-        return f"Found {len(emails)} matching emails. Call view_email_cache() to view emails."
+        print(f"\nDEBUG: Found {len(emails)} matching emails")
+        # Custom return format showing count and first page
+        result = f"Found {len(emails)} matching emails.\n\n"
+        result += "Below are the first 5 emails from email cache page 1:\n"
+        result += view_email_cache(1)
+        return result
     except Exception as e:
         return f"Error searching emails: {str(e)}"
 
@@ -401,7 +414,9 @@ def reply_to_email_by_number(
                     reply.CC = "; ".join(cc_recipients)
 
             if hasattr(email, 'HTMLBody') and email.HTMLBody:
-                html_reply = f"<div>{reply_text}</div>"
+                # Convert newlines to HTML line breaks
+                formatted_reply = reply_text.replace('\n\n', '<br><br>').replace('\n', '<br>')
+                html_reply = f"<div>{formatted_reply}</div>"
                 html_reply += "<div style='border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0in 0in 0in'>"
                 html_reply += f"<div><b>From:</b> {email.SenderName} <{email.SenderEmailAddress}></div>"
                 html_reply += f"<div><b>Sent:</b> {email.ReceivedTime.strftime('%A, %B %d, %Y %I:%M %p')}</div>"
@@ -467,7 +482,15 @@ def compose_email(to_recipients: List[str], subject: str, body: str, cc_recipien
         
         mail.To = "; ".join(to_recipients)
         mail.Subject = subject
-        mail.Body = body
+        
+        # Detect HTML content and handle appropriately
+        if any(tag in body.lower() for tag in ['<div>', '<p>', '<br>', '<html>']):
+            # For HTML content, replace newlines with <br> and set HTMLBody
+            html_body = body.replace('\n\n', '<br>').replace('\n', '<br>')
+            mail.HTMLBody = html_body
+        else:
+            # Plain text content
+            mail.Body = body
         
         if cc_recipients:
             mail.CC = "; ".join(cc_recipients)
@@ -476,6 +499,73 @@ def compose_email(to_recipients: List[str], subject: str, body: str, cc_recipien
         return "Email sent successfully"
     except Exception as e:
         return f"Failed to send email: {str(e)}"
+
+
+def send_batch_emails(email_number: int, csv_path: str, custom_text: str = "") -> str:
+    """Send email to recipients in batches of 500 (Outlook BCC limit)
+    
+    Args:
+        email_number: Email number from cache to use as template
+        csv_path: Path to CSV file containing recipient emails (one per line)
+        custom_text: Additional text to prepend to email body
+        
+    Returns:
+        str: Status message with batch sending results
+    """
+    try:
+        # Validate email exists in cache
+        if email_number not in email_cache:
+            return f"Error: Email #{email_number} not found in cache"
+            
+        # Get email template from cache
+        template = email_cache[email_number]
+        
+        # Read recipient emails from CSV
+        try:
+            with open(csv_path, 'r', newline='') as csvfile:
+                reader = csv.reader(csvfile)
+                recipients = [row[0].strip() for row in reader if row and row[0].strip()]
+        except Exception as e:
+            return f"Error reading CSV file: {str(e)}"
+            
+        if not recipients:
+            return "Error: No valid email addresses found in CSV"
+            
+        # Process in batches of 500
+        batch_size = 500
+        total_recipients = len(recipients)
+        batches = [recipients[i:i + batch_size] for i in range(0, total_recipients, batch_size)]
+        
+        results = []
+        outlook, _ = connect_to_outlook()
+        
+        for i, batch in enumerate(batches, 1):
+            try:
+                mail = outlook.CreateItem(0)  # 0 = olMailItem
+                
+                # Set BCC recipients
+                mail.BCC = "; ".join(batch)
+                mail.Subject = template['subject']
+                
+                # Prepare body with custom text
+                body = f"{custom_text}\n\n{template['body']}"
+                
+                if any(tag in body.lower() for tag in ['<div>', '<p>', '<br>', '<html>']):
+                    mail.HTMLBody = body.replace('\n\n', '<br>').replace('\n', '<br>')
+                else:
+                    mail.Body = body
+                
+                mail.Send()
+                results.append(f"Batch {i} ({len(batch)} emails) sent successfully")
+            except Exception as e:
+                results.append(f"Error sending batch {i}: {str(e)}")
+                
+        return "\n".join([
+            f"Batch sending completed for {total_recipients} recipients in {len(batches)} batches:",
+            *results
+        ])
+    except Exception as e:
+        return f"Error in batch sending process: {str(e)}"
 
 if __name__ == "__main__":
     """Command line interface for Outlook operations"""
@@ -491,6 +581,7 @@ if __name__ == "__main__":
         print("5. Get email details")
         print("6. Reply to email")
         print("7. Compose new email")
+        print("8. Send batch emails")
         print("0. Exit")
         
         choice = input("\nEnter command number: ").strip()
@@ -514,11 +605,27 @@ if __name__ == "__main__":
             term = input("Enter search term: ").strip()
             days = input("Enter number of days (1-30): ").strip()
             folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
-            match_all = input("Match all terms? (y/n, default=n): ").strip().lower() == 'y'
+            match_all = input("Match all terms? (y/n, default=y): ").strip().lower() != 'n'
             try:
                 print(search_emails(term, int(days), folder, match_all))
             except ValueError:
                 print("Invalid days input - must be a number")
+
+        elif choice == "8":
+            # Send batch emails
+            try:
+                email_num = input("Enter email number from cache: ").strip()
+                if not email_num.isdigit():
+                    print("Error: Email number must be numeric")
+                    continue
+                    
+                csv_path = input("Enter path to CSV file: ").strip()
+                custom_text = input("Enter custom text to prepend (optional): ").strip()
+                
+                result = send_batch_emails(int(email_num), csv_path, custom_text)
+                print(result)
+            except Exception as e:
+                print(f"Error: {str(e)}")
                 
         elif choice == "4":
             page = input("Enter page number (default 1): ").strip() or "1"
