@@ -306,13 +306,16 @@ def _apply_search_filter(folder_items, search_term: str):
         return folder_items
 
 def list_folders() -> List[str]:
-    """List all available mail folders"""
+    """List all available mail folders with selection numbers"""
     with OutlookSessionManager() as session:
         folders = []
+        folder_num = 1
         for folder in session.namespace.Folders:
-            folders.append(folder.Name)
+            folders.append(f"{folder_num}. {folder.Name}")
+            folder_num += 1
             for subfolder in folder.Folders:
-                folders.append(f"  {subfolder.Name}")
+                folders.append(f"  {folder_num}. {subfolder.Name}")
+                folder_num += 1
         return folders
 
 def list_recent_emails(days: int = MAX_DAYS, folder_name: Optional[str] = None) -> str:
@@ -350,8 +353,11 @@ def search_emails(search_term: str, days: int = MAX_DAYS, folder_name: Optional[
     if not emails:
         return f"No emails found matching '{search_term}' in the last {actual_days} days{note}{limit_note}"
     
-    for mail in emails:
+    # Store emails with both ID and sequential index for reference
+    for idx, mail in enumerate(emails, 1):
         if mail.get('id'):
+            mail['cache_index'] = idx  # Add sequential position
+            email_cache[mail['id']] = mail
             # Store original mail data without reformatting
             email_cache[mail['id']] = mail
     return f"Found {len(emails)} matching emails from last {actual_days} days{note}{limit_note}. Use 'view_email_cache' to view them."
@@ -593,18 +599,39 @@ def send_batch_emails(email_number: int, csv_path: str, custom_text: str = "") -
         str: Status message with batch sending results
     """
     try:
-        # Validate email exists in cache
-        if email_number not in email_cache:
+        # Find email in cache by sequential number
+        template = None
+        for mail in email_cache.values():
+            if mail.get('cache_index') == email_number:
+                template = mail
+                break
+                
+        if not template:
             return f"Error: Email #{email_number} not found in cache"
             
-        # Get email template from cache
-        template = email_cache[email_number]
+        # Validate template has required fields
+        if not all(key in template for key in ['subject', 'body']):
+            return "Error: Cached email missing required fields (subject/body)"
         
-        # Read recipient emails from CSV
+        # Read and validate recipient emails from CSV
         try:
-            with open(csv_path, 'r', newline='') as csvfile:
+            # Strip quotes from path if present
+            clean_path = csv_path.strip('"\'')
+            with open(clean_path, 'r', newline='', encoding='utf-8-sig') as csvfile:
                 reader = csv.reader(csvfile)
-                recipients = [row[0].strip() for row in reader if row and row[0].strip()]
+                recipients = []
+                for row_num, row in enumerate(reader, 1):
+                    if not row:
+                        continue
+                    email = row[0].strip()
+                    if not email:
+                        continue
+                    if '@' not in email:
+                        return f"Invalid email format in CSV row {row_num}: {email}"
+                    recipients.append(email)
+                
+                if not recipients:
+                    return "Error: No valid email addresses found in CSV"
         except Exception as e:
             return f"Error reading CSV file: {str(e)}"
             
@@ -620,21 +647,32 @@ def send_batch_emails(email_number: int, csv_path: str, custom_text: str = "") -
         with OutlookSessionManager() as session:
             for i, batch in enumerate(batches, 1):
                 try:
-                    mail = session.outlook.CreateItem(0)  # 0 = olMailItem
+                    # Forward original email with all recipients in BCC
+                    email_id = template['id']
+                    original = session.namespace.GetItemFromID(email_id)
+                    if not original:
+                        results.append(f"Error sending batch {i}: Could not retrieve original email")
+                        continue
+                        
+                    fwd = original.Forward()
                     
-                    # Set BCC recipients
-                    mail.BCC = "; ".join(batch)
-                    mail.Subject = template['subject']
+                    # Remove any automatically added recipients
+                    while fwd.Recipients.Count > 0:
+                        fwd.Recipients(1).Delete()
                     
-                    # Prepare body with custom text
-                    body = f"{custom_text}\n\n{template['body']}"
+                    # Add all recipients to BCC only
+                    for recipient in batch:
+                        new_recip = fwd.Recipients.Add(recipient)
+                        new_recip.Type = 3  # 3 = olBCC
                     
-                    if any(tag in body.lower() for tag in ['<div>', '<p>', '<br>', '<html>']):
-                        mail.HTMLBody = body.replace('\n\n', '<br>').replace('\n', '<br>')
-                    else:
-                        mail.Body = body
+                    # Prepend custom text if provided
+                    if custom_text:
+                        if fwd.BodyFormat == 2:  # 2 = olFormatHTML
+                            fwd.HTMLBody = f"<div>{custom_text}</div><br><br>{fwd.HTMLBody}"
+                        else:
+                            fwd.Body = f"{custom_text}\n\n{fwd.Body}"
                     
-                    mail.Send()
+                    fwd.Send()
                     results.append(f"Batch {i} ({len(batch)} emails) sent successfully")
                 except Exception as e:
                     results.append(f"Error sending batch {i}: {str(e)}")
