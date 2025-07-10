@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "outlook": {
-      "command": "python",
-      "args": ["d:\\Cline\\MCP\\outlook_mcp_server.py"],
-      "env": {}
-    }
-  }
-}

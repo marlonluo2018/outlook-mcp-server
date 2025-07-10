@@ -1,14 +1,36 @@
 import csv
 from datetime import datetime, timedelta
 import time
+import logging
 import pythoncom
 import win32com.client
 from typing import List, Dict, Optional, Any
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Create console handler with formatting
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
 
 # Global configuration constants
-MAX_DAYS = 7
+MAX_DAYS = 30
 MAX_EMAILS = 1000
 MAX_LOAD_TIME = 58  # seconds
+
+# Connection configuration
+CONNECT_TIMEOUT = 30  # seconds
+MAX_RETRIES = 3
+INITIAL_BACKOFF = 1  # seconds
+MAX_BACKOFF = 16  # seconds
+
+# Performance tuning
+DEFAULT_BATCH_SIZE = 50
+MAX_BATCH_SIZE = 200
 
 # Global email cache dictionary (key=EntryID, value=formatted email)
 email_cache = {}
@@ -39,16 +61,20 @@ class OutlookSessionManager:
                 pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
             
             # Create Outlook instance with retry
-            for attempt in range(3):
+            for attempt in range(MAX_RETRIES):
                 try:
                     self.outlook = win32com.client.Dispatch("Outlook.Application")
                     self.namespace = self.outlook.GetNamespace("MAPI")
                     self._connected = True
+                    if attempt > 0:
+                        logger.info(f"Successfully connected to Outlook after {attempt + 1} attempts")
                     return
                 except Exception as e:
-                    if attempt == 2:
+                    backoff = min(INITIAL_BACKOFF * (2 ** attempt), MAX_BACKOFF)
+                    if attempt == MAX_RETRIES - 1:
                         raise
-                    time.sleep(1)
+                    logger.warning(f"Connection attempt {attempt + 1} failed, retrying in {backoff}s: {str(e)}")
+                    time.sleep(backoff)
                     
         except Exception as e:
             self._connected = False
@@ -71,14 +97,19 @@ class OutlookSessionManager:
     def _ensure_connected(self):
         """Verify connection or reconnect with retry"""
         if not self._connected:
-            for attempt in range(3):
+            start_time = time.time()
+            for attempt in range(MAX_RETRIES):
                 try:
                     self._connect()
                     return
                 except Exception as e:
-                    if attempt == 2:
-                        raise RuntimeError(f"Failed to reconnect after 3 attempts: {str(e)}")
-                    time.sleep(2 * (attempt + 1))  # Exponential backoff
+                    if time.time() - start_time > CONNECT_TIMEOUT:
+                        raise RuntimeError(f"Connection timeout after {CONNECT_TIMEOUT}s")
+                    backoff = min(INITIAL_BACKOFF * (2 ** attempt), MAX_BACKOFF)
+                    if attempt == MAX_RETRIES - 1:
+                        raise RuntimeError(f"Failed to reconnect after {MAX_RETRIES} attempts: {str(e)}")
+                    logger.warning(f"Reconnection attempt {attempt + 1} failed, retrying in {backoff}s: {str(e)}")
+                    time.sleep(backoff)
             
     def get_folder(self, folder_name: Optional[str] = None):
         """Get specified folder or default inbox"""
@@ -116,61 +147,6 @@ class OutlookSessionManager:
             raise RuntimeError(f"Failed to find folder: {str(e)}")
         return None
 
-def format_email(mail_item) -> Dict[str, Any]:
-    """Format an Outlook mail item into a structured dictionary"""
-    try:
-        if isinstance(mail_item, dict):
-            # Handle already formatted emails from cache
-            if 'to_recipients' in mail_item and 'cc_recipients' in mail_item:
-                # Already properly formatted - return as-is
-                return mail_item
-            elif 'recipients' in mail_item:
-                # Convert recipients format to match our expected structure
-                to_recipients = []
-                cc_recipients = []
-                
-                for recipient in mail_item['recipients']:
-                    if 'name' in recipient:
-                        name = recipient['name'].strip()
-                        if 'type' in recipient and recipient['type'] == 2:  # CC recipient
-                            cc_recipients.append({'name': name})
-                        else:  # Default to To recipient
-                            to_recipients.append({'name': name})
-                
-                return {
-                    **mail_item,
-                    'to_recipients': to_recipients,
-                    'cc_recipients': cc_recipients
-                }
-            return mail_item
-            
-        # Get To and CC recipients separately (store emails but don't display)
-        to_recipients = []
-        cc_recipients = []
-        if hasattr(mail_item, 'Recipients') and mail_item.Recipients:
-            for i in range(1, mail_item.Recipients.Count + 1):
-                recipient = mail_item.Recipients.Item(i)
-                if recipient.Type == 1:  # olTo
-                    to_recipients.append({'name': recipient.Name})
-                elif recipient.Type == 2:  # olCC
-                    cc_recipients.append({'name': recipient.Name})
-        
-        # Fallback for direct To recipients if none found
-        if not to_recipients and hasattr(mail_item, 'To'):
-            to_recipients = [{'name': name.strip()} for name in mail_item.To.split(';') if name.strip()]
-            
-        return {
-            "id": mail_item.EntryID,
-            "subject": getattr(mail_item, 'Subject', 'No Subject'),
-            "sender": getattr(mail_item, 'SenderName', 'Unknown Sender'),
-            "received_time": mail_item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if hasattr(mail_item, 'ReceivedTime') and mail_item.ReceivedTime else None,
-            "to_recipients": to_recipients,
-            "cc_recipients": cc_recipients,
-            "has_attachments": getattr(mail_item, 'Attachments', 0).Count > 0
-        }
-    except Exception as e:
-        raise Exception(f"Failed to format email: {str(e)}")
-
 
 def get_emails_from_folder(
     folder_name: Optional[str] = None,
@@ -204,10 +180,10 @@ def get_emails_from_folder(
                 try:
                     folder = session.get_folder(folder_name)
                     if not folder:
-                        print(f"Folder '{folder_name or 'Inbox'}' not found")
+                        logger.warning(f"Folder '{folder_name or 'Inbox'}' not found")
                         return []
                 except RuntimeError as e:
-                    print(f"Connection error (attempt {retry_count + 1}/{max_retries}): {str(e)}")
+                    logger.error(f"Connection error (attempt {retry_count + 1}/{max_retries}): {str(e)}")
                     if retry_count == max_retries:
                         raise RuntimeError(f"Failed after {max_retries} retries")
                     time.sleep(3 * (retry_count + 1))
@@ -239,7 +215,7 @@ def get_emails_from_folder(
                             limit_reached = " (MAX_EMAILS reached)"
                         
                         if limit_reached:
-                            print(f"Processing completed{limit_reached}")
+                            logger.info(f"Processing completed{limit_reached}")
                             return emails[:MAX_EMAILS], limit_reached
                             
                         batch_end = min(batch_start + batch_size - 1, total_items)
@@ -275,13 +251,12 @@ def get_emails_from_folder(
                                 batch_emails.append(email_data)
                                 
                             except Exception as e:
-                                print(f"Error processing email {i}: {str(e)}")
+                                logger.error(f"Error processing email {i}: {str(e)}")
                                 continue
                                 
-                        formatted_batch = [format_email(email) for email in batch_emails]
-                        emails.extend(formatted_batch)
-                        # Add formatted emails to cache
-                        for email in formatted_batch:
+                        emails.extend(batch_emails)
+                        # Add emails to cache
+                        for email in batch_emails:
                             if 'id' in email and email['id']:
                                 email_cache[email['id']] = email
                 finally:
@@ -291,7 +266,7 @@ def get_emails_from_folder(
                 return emails[:MAX_EMAILS], limit_note
                 
             except Exception as e:
-                print(f"Error processing batch (attempt {retry_count + 1}): {str(e)}")
+                logger.error(f"Error processing batch (attempt {retry_count + 1}): {str(e)}", exc_info=True)
                 retry_count += 1
                 if retry_count > max_retries:
                     raise
@@ -302,7 +277,7 @@ def _apply_search_filter(folder_items, search_term: str):
         filter_term = f"@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{search_term}%'"
         return folder_items.Restrict(filter_term)
     except Exception as e:
-        print(f"Warning: Could not apply search filter - {str(e)}")
+        logger.warning(f"Could not apply search filter - {str(e)}")
         return folder_items
 
 def list_folders() -> List[str]:
