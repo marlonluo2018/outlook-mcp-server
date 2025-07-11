@@ -1,9 +1,8 @@
-from backend.shared import configure_logging
-
-import pythoncom
-import win32com.client
 from typing import Optional
 import logging
+import pythoncom
+import win32com.client
+from backend.shared import configure_logging
 
 # Initialize logging
 configure_logging()
