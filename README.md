@@ -1,25 +1,25 @@
 # Outlook MCP Server
 
-An MCP (Model Context Protocol) server that provides tools for interacting with Microsoft Outlook via Python.
+An MCP (Model Context Protocol) server that provides tools for interacting with Microsoft Outlook via Python COM API.
 
 ## Features
 
 - Connect to Outlook and manage email operations
-- List folders and recent emails
-- Search emails with advanced filtering
-- View detailed email content
-- Reply to emails and manage recipients
-- Handle attachments
-- Batch processing support
-- Robust error handling and logging
-- Unit test coverage
+- List folders and recent emails (with pagination)
+- Search emails with advanced filtering (AND/OR logic)
+- View detailed email content (including attachments)
+- Reply to emails with custom recipients
+- Compose new emails (HTML/plain text support)
+- Email caching system for performance
+- Batch processing with timeout handling
+- Robust error handling and input validation
 
 ## Requirements
 
 - Windows OS (required for Outlook COM automation)
-- Python 3.8 or higher
+- Python 3.8+
 - Microsoft Outlook installed and configured
-- Required Python packages (see requirements.txt)
+- Required packages: `fastmcp`, `pywin32`
 
 ## Installation
 
@@ -28,136 +28,111 @@ An MCP (Model Context Protocol) server that provides tools for interacting with 
 git clone https://github.com/yourusername/outlook-mcp-server.git
 cd outlook-mcp-server
 
-# Install required packages
+# Install requirements
 pip install -r requirements.txt
 
-# Install in development mode
-pip install -e .
+# Run the server
+python outlook_mcp_server.py
 ```
 
 ## Configuration
 
-The server uses the following configuration constants that can be adjusted in `outlook_operations.py`:
+Constants are defined in `backend/shared.py`:
 
 ```python
 MAX_DAYS = 30          # Maximum days to look back
-MAX_EMAILS = 1000      # Maximum emails to process
-MAX_LOAD_TIME = 58     # Maximum processing time in seconds
-CONNECT_TIMEOUT = 30   # Connection timeout in seconds
-MAX_RETRIES = 3        # Maximum connection retry attempts
+MAX_EMAILS = 1000      # Maximum emails to process  
+MAX_LOAD_TIME = 58     # Maximum processing time (seconds)
 ```
 
-## Usage
+## Available Tools
 
-### Starting the Server
-
-```bash
-python outlook_mcp_server.py
-```
-
-### Available Tools
-
-#### 1. List Folders
+### 1. List Folders
 ```python
-list_folders()  # Lists all available Outlook folders
+get_folder_list_tool()
+# Returns all Outlook folders as list
 ```
 
-#### 2. List Recent Emails
+### 2. List Recent Emails
 ```python
-list_recent_emails(
-    days=7,              # Number of days to look back
+list_recent_emails_tool(
+    days=7,              # Days to look back (1-30)
     folder_name="Inbox"  # Optional folder name
 )
+# Returns count + first page preview
 ```
 
-#### 3. Search Emails
+### 3. Search Emails  
 ```python
-search_emails(
-    search_term="important",  # Search term
-    days=7,                   # Number of days to look back
-    folder_name="Inbox",      # Optional folder name
-    match_all=True           # Match all terms (AND) or any term (OR)
+search_emails_tool(
+    search_term="important",  # Search term(s)
+    days=7,                  # Days to look back
+    folder_name="Inbox",     # Optional folder
+    match_all=True           # AND/OR logic
 )
+# Returns count + first page preview
 ```
 
-#### 4. View Email Cache
-```python
-view_email_cache(
-    page=1,     # Page number (5 emails per page)
+### 4. View Email Cache
+```python 
+view_email_cache_tool(
+    page=1  # Page number (5 emails/page)
 )
+# Returns formatted email previews
 ```
 
-#### 5. Get Email Details
+### 5. Get Email Details
 ```python
-get_email_by_number(
-    email_number=1  # Email number from cache
+get_email_by_number_tool(
+    email_number=1  # Cache position (1-based)
 )
+# Returns full email content
 ```
 
-#### 6. Reply to Email
+### 6. Reply to Email
 ```python
-reply_to_email_by_number(
+reply_to_email_by_number_tool(
     email_number=1,
-    reply_text="Thank you for your email",
-    to_recipients=None,  # Optional list of recipients
-    cc_recipients=None   # Optional list of CC recipients
+    reply_text="Thank you",
+    to_recipients=None,  # Custom To: (None=original)
+    cc_recipients=None   # Custom CC: (None=original) 
 )
+# Requires explicit user confirmation
 ```
 
-## Development
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run tests with coverage
-pytest --cov=.
-
-# Run specific test file
-pytest tests/test_outlook_operations.py
+### 7. Compose Email
+```python
+compose_email_tool(
+    recipient_email="user@example.com",
+    subject="Hello",
+    body="Message content", 
+    cc_email=None        # Optional CC
+)
+# Requires explicit user confirmation
 ```
 
-### Project Structure
+## Project Structure
 
 ```
 outlook-mcp-server/
-├── outlook_mcp_server.py   # Main MCP server
-├── outlook_operations.py   # Core Outlook operations
-├── utils.py               # Utility functions
+├── outlook_mcp_server.py   # Main MCP server with tools
+├── backend/
+│   ├── email_retrieval.py  # Email listing/searching
+│   ├── email_composition.py # Email sending
+│   ├── outlook_session.py  # Outlook connection mgmt
+│   ├── batch_operations.py # Batch processing
+│   └── shared.py          # Shared constants
 ├── requirements.txt       # Dependencies
-├── setup.py              # Package configuration
-├── tests/                # Test directory
-│   ├── __init__.py
-│   └── test_outlook_operations.py
 └── README.md
 ```
 
-## Error Handling
+## Important Notes
 
-The server includes comprehensive error handling:
-- Connection retry with exponential backoff
-- Timeout handling for long-running operations
-- Detailed error logging
-- Graceful degradation for non-critical failures
-
-## Logging
-
-Logs are available at multiple levels:
-- INFO: General operation information
-- WARNING: Non-critical issues
-- ERROR: Critical issues that need attention
-- DEBUG: Detailed debugging information
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/your-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin feature/your-feature`)
-5. Create a new Pull Request
+1. Email sending operations REQUIRE explicit user confirmation
+2. Search is limited to email subjects only
+3. Default pagination shows 5 emails per page
+4. Cache is cleared when listing new emails
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License
