@@ -105,8 +105,20 @@ Located in `backend/shared.py`:
 
 ## 🎯 Usage
 
-### MCP Server Mode
-The server is designed to work with MCP clients like Claude Desktop. Use the configuration above to integrate.
+### MCP Server Mode (For LLM Tool Calls)
+
+**Tool Call Sequence**:
+1. First call either:
+   - `list_recent_emails_tool` to load recent emails into cache
+   - `search_emails_tool` to load matching emails into cache
+2. Then call `view_email_cache_tool` to identify specific email to work with
+3. LLM drafts reply content based on cached email
+4. Finally call `reply_to_email_by_number_tool` (requires user confirmation)
+
+**Key Points**:
+- All operations work with the email cache
+- Write operations require explicit user confirmation
+- Cache is automatically refreshed on new list/search
 
 ### CLI Interface Workflow
 The CLI interface follows a strict email cache workflow:
