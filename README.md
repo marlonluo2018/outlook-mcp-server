@@ -145,72 +145,86 @@ python cli_interface.py
 ### Available Tools
 
 #### 1. List Folders
-```python
-# MCP Tool
-get_folder_list_tool()
-# Returns: {"content": [{"type": "text", "text": "['Inbox', 'Sent Items', 'Drafts', ...]"}]}
+```json
+{
+  "tool": "get_folder_list_tool",
+  "parameters": {}
+}
+// Returns: {"content": [{"type": "text", "text": "['Inbox', 'Sent Items', 'Drafts', ...]"}]}
 ```
 
 #### 2. List Recent Emails
-```python
-# MCP Tool
-list_recent_emails_tool(
-    days=7,              # Range: 1-30 days
-    folder_name="Inbox"  # Optional: specify folder
-)
-# Returns count and first page preview
+```json
+{
+  "tool": "list_recent_emails_tool",
+  "parameters": {
+    "days": 7,
+    "folder_name": "Inbox"
+  }
+}
+// Returns count and first page preview
 ```
 
 #### 3. Search Emails
-```python
-# MCP Tool
-search_emails_tool(
-    search_term="meeting notes",     # Plain text search
-    days=14,                        # Search within timeframe
-    folder_name="Inbox",            # Target folder
-    match_all=True                  # AND/OR logic for multiple terms
-)
+```json
+{
+  "tool": "search_emails_tool",
+  "parameters": {
+    "search_term": "meeting notes",
+    "days": 14,
+    "folder_name": "Inbox",
+    "match_all": true
+  }
+}
 ```
 
 #### 4. View Email Cache
-```python
-# MCP Tool
-view_email_cache_tool(
-    page=1  # Pagination: 5 emails per page
-)
+```json
+{
+  "tool": "view_email_cache_tool",
+  "parameters": {
+    "page": 1
+  }
+}
 ```
 
 #### 5. Get Email Details
-```python
-# MCP Tool
-get_email_by_number_tool(
-    email_number=3  # 1-based index from cache
-)
-# Returns full email with body and attachments
+```json
+{
+  "tool": "get_email_by_number_tool",
+  "parameters": {
+    "email_number": 3
+  }
+}
+// Returns full email with body and attachments
 ```
 
 #### 6. Reply to Email
-```python
-# MCP Tool
-reply_to_email_by_number_tool(
-    email_number=5,
-    reply_text="Thank you for your message...",
-    to_recipients=["custom@example.com"],  # Optional override
-    cc_recipients=["boss@example.com"]     # Optional override
-)
-# ⚠️ Requires explicit user confirmation
+```json
+{
+  "tool": "reply_to_email_by_number_tool",
+  "parameters": {
+    "email_number": 5,
+    "reply_text": "Thank you for your message...",
+    "to_recipients": ["custom@example.com"],
+    "cc_recipients": ["boss@example.com"]
+  }
+}
+// ⚠️ Requires explicit user confirmation
 ```
 
 #### 7. Compose New Email
-```python
-# MCP Tool
-compose_email_tool(
-    recipient_email="client@example.com",
-    subject="Project Update",
-    body="Dear team,\n\nHere's the latest update...",
-    cc_email="manager@example.com"  # Optional
-)
-# ⚠️ Requires explicit user confirmation
+```json
+{
+  "tool": "compose_email_tool",
+  "parameters": {
+    "recipient_email": "client@example.com",
+    "subject": "Project Update",
+    "body": "Dear team,\n\nHere's the latest update...",
+    "cc_email": "manager@example.com"
+  }
+}
+// ⚠️ Requires explicit user confirmation
 ```
 
 #### 8. Batch Email Operations (Interactive Only)
