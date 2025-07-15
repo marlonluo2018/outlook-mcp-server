@@ -213,15 +213,14 @@ compose_email_tool(
 # ⚠️ Requires explicit user confirmation
 ```
 
-#### 8. Batch Email Operations (CLI Only)
-**Note**: Batch email operations are intentionally excluded from the MCP server to prevent LLMs from running bulk email operations without explicit user confirmation.
+#### 8. Batch Email Operations (Interactive Only)
+**Workflow**:
+1. First load template emails into cache via List/Search
+2. Select cached email as template in interactive mode
+3. Provide CSV of recipients and optional custom text
+4. Confirm before sending
 
-```bash
-# CLI only - requires explicit user interaction
-python cli_interface.py batch 2 recipients.csv "Additional context"
-```
-
-This security measure ensures users maintain full control over bulk email operations.
+Note: Batch operations require working with the email cache and are only available through interactive CLI.
 
 ## 📊 Data Flow Architecture
 
