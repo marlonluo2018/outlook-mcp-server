@@ -177,7 +177,7 @@ def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> str:
     emails, note = get_emails_from_folder(
         folder_name=folder_name,
         days=days)
-    return f"Found {len(emails)} emails from last {days} days. Use 'view_email_cache' to view them.{note}"
+    return f"Found {len(emails)} emails from last {days} days. Use 'view_email_cache_tool' to view them.{note}"
 
 def search_emails(
     query: str,
@@ -202,7 +202,7 @@ def search_emails(
         folder_name=folder_name,
         match_all=match_all)
     days_str = f" from last {days} days" if days else ""
-    return f"Found {len(emails)} matching emails{days_str}. Use 'view_email_cache' to view them.{note}"
+    return f"Found {len(emails)} matching emails{days_str}. Use 'view_email_cache_tool' to view them.{note}"
 
 def list_folders() -> List[str]:
     """List all available mail folders"""
@@ -325,7 +325,7 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
         result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
         result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
     
-    result += f"Use view_email_cache(page={page + 1}) to view next page." if page < total_pages else "This is the last page."
-    result += "\nCall get_email_details() to get full content of the email."
+    result += f"Use view_email_cache_tool(page={page + 1}) to view next page." if page < total_pages else "This is the last page."
+    result += "\nCall get_email_details_tool() to get full content of the email."
     
     return result
