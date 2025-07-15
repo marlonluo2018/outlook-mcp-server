@@ -58,25 +58,23 @@ Add to your MCP client configuration (e.g., Claude Desktop settings.json):
 }
 ```
 
-### Alternative: CLI Interface
-The CLI interface works exclusively with the email cache for all operations:
+### Human Interface: CLI
+The CLI interface is designed exclusively for human users, not LLMs:
 
-1. First load emails into cache using List or Search operations
-2. All subsequent operations (view, reply, compose) work with cached emails
-3. Cache is automatically refreshed when listing new emails
+- **Purpose**: Provides a human-friendly interactive interface
+- **Audience**: Only for direct human operation
+- **Security**: All operations require interactive confirmation
+- **Workflow**:
+  1. Load emails into cache (List/Search)
+  2. Operate on cached emails (View/Reply/Compose)
+  3. Cache auto-refreshes on new operations
 
 ```bash
-# Interactive mode (recommended)
+# Start interactive session (human only)
 python cli_interface.py
-
-# Workflow example:
-1. List recent emails to populate cache
-2. View email details from cache
-3. Reply to or compose new emails
-4. Batch operations use cached templates
 ```
 
-Note: The CLI no longer supports direct command arguments - all operations must go through the interactive menu.
+Note: For LLM integration, use the MCP server interface instead.
 
 ### Development Installation
 ```bash
