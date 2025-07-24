@@ -7,6 +7,7 @@ A comprehensive Model Context Protocol (MCP) server that provides secure, effici
 The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook, providing a standardized interface for email operations. Built on the Model Context Protocol, it offers both programmatic API access and interactive CLI usage patterns.
 
 ### Key Capabilities
+
 - **Email Operations**: Search, retrieve, compose, and reply to emails
 - **Folder Management**: Browse and access all Outlook folders
 - **Batch Processing**: Send bulk emails with CSV-based recipient lists (CLI only)
@@ -17,12 +18,14 @@ The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook,
 ## 📋 Requirements
 
 ### System Requirements
+
 - **Operating System**: Windows 10/11 (required for Outlook COM automation)
 - **Python**: 3.8 or higher
 - **Microsoft Outlook**: 2016 or later, properly configured and running
 - **COM Access**: Outlook must be accessible via COM (default for most installations)
 
 ### Dependencies
+
 - `fastmcp`: MCP server framework
 - `pywin32`: Windows COM automation
 - Standard library: `argparse`, `csv`, `datetime`, `logging`, `typing`
@@ -30,6 +33,7 @@ The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook,
 ## 🛠️ Installation
 
 ### Quick Start
+
 ```bash
 # Clone the repository
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git
@@ -44,6 +48,7 @@ pip install -r requirements.txt
 ```
 
 ### MCP Configuration
+
 Add to your MCP client configuration (e.g., Claude Desktop settings.json):
 
 ```json
@@ -59,6 +64,7 @@ Add to your MCP client configuration (e.g., Claude Desktop settings.json):
 ```
 
 ### Human Interface: CLI
+
 The CLI interface is designed exclusively for human users, not LLMs:
 
 - **Purpose**: Provides a human-friendly interactive interface
@@ -77,6 +83,7 @@ python cli_interface.py
 Note: For LLM integration, use the MCP server interface instead.
 
 ### Development Installation
+
 ```bash
 # Install development dependencies
 pip install -r requirements-dev.txt
@@ -93,6 +100,7 @@ export OUTLOOK_MCP_CACHE_TIMEOUT=300  # seconds
 ```
 
 ### Configuration Constants
+
 Located in `backend/shared.py`:
 
 | Constant | Default | Description |
@@ -108,6 +116,7 @@ Located in `backend/shared.py`:
 ### MCP Server Mode (For LLM Tool Calls)
 
 **Tool Call Sequence**:
+
 1. First call either:
    - `list_recent_emails_tool` to load recent emails into cache
    - `search_emails_tool` to load matching emails into cache
@@ -116,11 +125,13 @@ Located in `backend/shared.py`:
 4. Finally call `reply_to_email_by_number_tool` (requires user confirmation)
 
 **Key Points**:
+
 - All operations work with the email cache
 - Write operations require explicit user confirmation
 - Cache is automatically refreshed on new list/search
 
 ### CLI Interface Workflow
+
 The CLI interface follows a strict email cache workflow:
 
 1. **Cache Population**:
@@ -145,6 +156,7 @@ python cli_interface.py
 ### Available Tools
 
 #### 1. List Folders
+
 ```json
 {
   "tool": "get_folder_list_tool",
@@ -154,6 +166,7 @@ python cli_interface.py
 ```
 
 #### 2. List Recent Emails
+
 ```json
 {
   "tool": "list_recent_emails_tool",
@@ -166,6 +179,7 @@ python cli_interface.py
 ```
 
 #### 3. Search Emails
+
 ```json
 {
   "tool": "search_emails_tool",
@@ -179,6 +193,7 @@ python cli_interface.py
 ```
 
 #### 4. View Email Cache
+
 ```json
 {
   "tool": "view_email_cache_tool",
@@ -189,6 +204,7 @@ python cli_interface.py
 ```
 
 #### 5. Get Email Details
+
 ```json
 {
   "tool": "get_email_by_number_tool",
@@ -200,6 +216,7 @@ python cli_interface.py
 ```
 
 #### 6. Reply to Email
+
 ```json
 {
   "tool": "reply_to_email_by_number_tool",
@@ -214,6 +231,7 @@ python cli_interface.py
 ```
 
 #### 7. Compose New Email
+
 ```json
 {
   "tool": "compose_email_tool",
@@ -228,7 +246,9 @@ python cli_interface.py
 ```
 
 #### 8. Batch Email Operations (Interactive Only)
+
 **Workflow**:
+
 1. First load template emails into cache via List/Search
 2. Select cached email as template in interactive mode
 3. Provide CSV of recipients and optional custom text
@@ -239,43 +259,48 @@ Note: Batch operations require working with the email cache and are only availab
 ## 📊 Data Flow Architecture
 
 ### Email Processing Pipeline
-```
+
+```mermaid
 Outlook COM → Session Manager → Email Parser → Cache → API Response
 ```
 
 ### Cache System
+
 - **Key**: Email EntryID (unique Outlook identifier)
 - **Value**: Structured email data (subject, sender, body, attachments)
 - **Lifetime**: Cache cleared on new email listing/search
 - **Format**: JSON-serializable Python dictionaries
 
 ### Error Handling Flow
-```
+
+```mermaid
 Operation → Try/Catch → Retry Logic → User-friendly Error → Logging
 ```
 
 ## 🔒 Security Considerations
 
 ### Email Sending Protection
+
 - **Explicit Confirmation**: All email sending operations require user approval
 - **Rate Limiting**: Batch operations limited to 500 recipients per batch
 - **Input Validation**: All inputs sanitized and validated before processing
 
 ### Data Privacy
+
 - **Local Processing**: All operations performed locally on user's machine
 - **No External Calls**: No data transmitted outside Outlook COM interface
 - **Cache Isolation**: Email cache stored in memory only, no persistent storage
 
-
-
 ## 📈 Performance Optimization
 
 ### Caching Strategy
+
 - **Smart Loading**: Only load requested email ranges
 - **Batch Processing**: Process emails in configurable batches
 - **Timeout Protection**: Automatic termination of long-running operations
 
 ### Memory Management
+
 - **Streaming**: Large email bodies truncated in cache
 - **Garbage Collection**: Automatic cleanup of COM objects
 - **Resource Limits**: Configurable maximum email processing limits
@@ -283,6 +308,7 @@ Operation → Try/Catch → Retry Logic → User-friendly Error → Logging
 ## 🤝 Contributing
 
 ### Development Setup
+
 ```bash
 # Fork and clone
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git

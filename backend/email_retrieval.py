@@ -22,6 +22,9 @@ def get_emails_from_folder(
     Returns:
         Tuple of (email list, limit note string)
     """
+    # Clear cache before loading new emails
+    email_cache.clear()
+    
     emails = []
     start_time = time.time()
     retry_count = 0
@@ -55,9 +58,6 @@ def get_emails_from_folder(
                     if len(emails) >= MAX_EMAILS:
                         limit_note = f" (MAX_EMAILS={MAX_EMAILS} reached)"
                         break
-                folder_items = folder_items.Restrict(
-                    f"[ReceivedTime] >= '{threshold_date.strftime('%m/%d/%Y %H:%M %p')}'"
-                )
                 
                 if search_term:
                     folder_items = _apply_search_filter(
