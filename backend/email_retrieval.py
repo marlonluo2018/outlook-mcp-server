@@ -255,16 +255,22 @@ def get_email_by_number(email_number: int) -> Optional[Dict]:
         raise ValueError(f"Invalid cache item type: {type(email)}. Expected dict.")
     
     # Create filtered copy without sensitive fields
+    sender = email.get('sender', 'Unknown Sender')
+    if isinstance(sender, dict):
+        sender_name = sender.get('name', 'Unknown Sender')
+    else:
+        sender_name = str(sender)
+    
     filtered_email = {
         'subject': email.get('subject', 'No Subject'),
-        'sender': {'name': email.get('sender', 'Unknown Sender')},
+        'sender': sender_name,
         'received_time': email.get('received_time', ''),
         'unread': email.get('unread', False),
         'has_attachments': email.get('has_attachments', False),
         'size': email.get('size', 0),
         'body': email.get('body', ''),
         'to_recipients': [
-            {'name': r.get('name', '')}
+            r.get('name', '') if isinstance(r, dict) else str(r)
             for r in email.get('to_recipients', [])
         ],
         'attachments': email.get('attachments', [])
