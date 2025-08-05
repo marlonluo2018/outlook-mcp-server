@@ -10,12 +10,31 @@ def reply_to_email_by_number(
     cc_recipients: Optional[List[str]] = None
 ) -> str:
     """Reply to an email with custom recipients if provided"""
+    # Input validation
+    if not isinstance(email_number, int) or email_number < 1:
+        raise ValueError("Email number must be a positive integer")
+    
+    if not reply_text or not isinstance(reply_text, str):
+        raise ValueError("Reply text must be a non-empty string")
+    
+    if to_recipients is not None:
+        if not isinstance(to_recipients, list):
+            raise ValueError("To recipients must be a list or None")
+        if not all(isinstance(email, str) and email.strip() for email in to_recipients):
+            raise ValueError("All To email addresses must be non-empty strings")
+    
+    if cc_recipients is not None:
+        if not isinstance(cc_recipients, list):
+            raise ValueError("CC recipients must be a list or None")
+        if not all(isinstance(email, str) and email.strip() for email in cc_recipients):
+            raise ValueError("All CC email addresses must be non-empty strings")
+    
     if not email_cache:
-        return "No emails available - please list emails first."
+        raise ValueError("No emails available - please list emails first.")
         
     cache_items = list(email_cache.values())
     if not 1 <= email_number <= len(cache_items):
-        return f"Email #{email_number} not found in current listing."
+        raise ValueError(f"Email #{email_number} not found in current listing.")
     
     email_id = cache_items[email_number - 1]["id"]
     
@@ -23,7 +42,7 @@ def reply_to_email_by_number(
         try:
             email = session.namespace.GetItemFromID(email_id)
             if not email:
-                return "Could not retrieve the email from Outlook."
+                raise RuntimeError("Could not retrieve the email from Outlook.")
                 
             if to_recipients is None and cc_recipients is None:
                 reply = email.ReplyAll()
@@ -66,6 +85,25 @@ def compose_email(
     Returns:
         str: Success/error message
     """
+    # Input validation
+    if not to_recipients or not isinstance(to_recipients, list):
+        raise ValueError("To recipients must be a non-empty list")
+    
+    if not all(isinstance(email, str) and email.strip() for email in to_recipients):
+        raise ValueError("All recipient email addresses must be non-empty strings")
+    
+    if not subject or not isinstance(subject, str):
+        raise ValueError("Subject must be a non-empty string")
+    
+    if not body or not isinstance(body, str):
+        raise ValueError("Body must be a non-empty string")
+    
+    if cc_recipients is not None:
+        if not isinstance(cc_recipients, list):
+            raise ValueError("CC recipients must be a list or None")
+        if not all(isinstance(email, str) and email.strip() for email in cc_recipients):
+            raise ValueError("All CC email addresses must be non-empty strings")
+    
     with OutlookSessionManager() as session:
         try:
             mail = session.outlook.CreateItem(0)  # 0 = olMailItem

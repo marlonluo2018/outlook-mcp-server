@@ -180,10 +180,16 @@ def _process_email_item(item) -> Optional[Dict]:
 def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> str:
     """Public interface for listing emails (used by CLI)
     Loads emails into cache and returns count message"""
+    if days is not None and not isinstance(days, int):
+        raise ValueError("Days parameter must be an integer")
+    if days is not None and (days < 1 or days > 30):
+        raise ValueError("Days parameter must be between 1 and 30")
+    
     emails, note = get_emails_from_folder(
         folder_name=folder_name,
         days=days)
-    return f"Found {len(emails)} emails from last {days} days. Use 'view_email_cache_tool' to view them.{note}"
+    days_str = f" from last {days} days" if days else ""
+    return f"Found {len(emails)} emails{days_str}. Use 'view_email_cache_tool' to view them.{note}"
 
 def search_emails(
     query: str,
@@ -202,6 +208,19 @@ def search_emails(
     Returns:
         Formatted string with count and note
     """
+    if ':' in str(query):
+        raise ValueError("Field-specific searches (using ':') are not supported. "
+                       "Use plain text search terms only.")
+    
+    if not query or not isinstance(query, str):
+        raise ValueError("Search term must be a non-empty string")
+    
+    if days is not None and not isinstance(days, int):
+        raise ValueError("Days parameter must be an integer")
+    
+    if days is not None and (days < 1 or days > 30):
+        raise ValueError("Days parameter must be between 1 and 30")
+    
     emails, note = get_emails_from_folder(
         search_term=query,
         days=days,

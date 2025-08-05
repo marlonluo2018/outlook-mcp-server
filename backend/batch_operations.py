@@ -9,27 +9,53 @@ def send_batch_emails(
     custom_text: str = ""
 ) -> str:
     """Send email to recipients in batches of 500 (Outlook BCC limit)"""
+    # Input validation
+    if not isinstance(email_number, int) or email_number < 1:
+        raise ValueError("Email number must be a positive integer")
+    
+    if not csv_path or not isinstance(csv_path, str):
+        raise ValueError("CSV path must be a non-empty string")
+    
+    if not isinstance(custom_text, str):
+        raise ValueError("Custom text must be a string")
+    
     if not email_cache:
-        return "No emails available - please list emails first."
+        raise ValueError("No emails available - please list emails first.")
 
     cache_items = list(email_cache.values())
     if not 1 <= email_number <= len(cache_items):
-        return f"Email #{email_number} not found in current listing."
+        raise ValueError(f"Email #{email_number} not found in current listing.")
 
     try:
         # Clean and validate CSV path
         clean_path = csv_path.strip('"\'')
         
+        # Validate email format
+        import re
+        email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        
         # Read recipients from CSV
         with open(clean_path, 'r', newline='', encoding='utf-8-sig') as csvfile:
             reader = csv.DictReader(csvfile)
             if 'email' not in reader.fieldnames:
-                return "CSV must contain an 'email' column"
+                raise ValueError("CSV must contain an 'email' column")
                 
-            recipients = [row['email'] for row in reader if row.get('email')]
+            recipients = []
+            invalid_emails = []
+            
+            for row in reader:
+                email = row.get('email', '').strip()
+                if email:
+                    if email_pattern.match(email):
+                        recipients.append(email)
+                    else:
+                        invalid_emails.append(email)
+            
+        if invalid_emails:
+            raise ValueError(f"Invalid email addresses found: {', '.join(invalid_emails[:5])}{'...' if len(invalid_emails) > 5 else ''}")
             
         if not recipients:
-            return "No valid email addresses found in CSV"
+            raise ValueError("No valid email addresses found in CSV")
 
         # Process in batches of 500 (Outlook BCC limit)
         batch_size = 500
