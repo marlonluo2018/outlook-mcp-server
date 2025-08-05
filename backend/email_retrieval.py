@@ -31,7 +31,7 @@ def get_emails_from_folder(
     limit_note = ""
     
     with OutlookSessionManager() as session:
-        while retry_count <= 2:  # MAX_RETRIES from shared.py
+        while retry_count < 3:  # MAX_RETRIES from shared.py
             try:
                 # Check timeout
                 if time.time() - start_time > MAX_LOAD_TIME:
@@ -43,52 +43,86 @@ def get_emails_from_folder(
                     return [], " (Folder not found)"
                     
                 folder_items = folder.Items
-                folder_items.Sort("[ReceivedTime]", True)
+                folder_items.Sort("[ReceivedTime]", True)  # Newest first
                 
-                # Filter by date range (exact match to original implementation)
-                days_to_use = min(days or MAX_DAYS, MAX_DAYS)  # Apply MAX_DAYS limit
-                threshold_date = datetime.now() - timedelta(days=days_to_use)
+                # Get date threshold
+                days_to_use = min(days or MAX_DAYS, MAX_DAYS)
+                threshold_date = datetime.now().astimezone() - timedelta(days=days_to_use)
                 
-                # Apply date filter using Restrict() with original format
-                filter_str = f"[ReceivedTime] >= '{threshold_date.strftime('%m/%d/%Y %H:%M %p')}'"
-                filtered_items = folder_items.Restrict(filter_str)
-                
-                # Process emails with MAX_EMAILS limit
-                for i, item in enumerate(filtered_items):
-                    if len(emails) >= MAX_EMAILS:
-                        limit_note = f" (MAX_EMAILS={MAX_EMAILS} reached)"
-                        break
-                
+                    
+                # Process emails from newest to oldest
+                emails = []
+                processed_count = 0
+                total_items = folder_items.Count
                 if search_term:
-                    folder_items = _apply_search_filter(
-                        folder_items,
-                        search_term,
-                        match_all=match_all
-                    )
-                
-                # Process emails in batches
+                    print(f"Searching for emails containing: '{search_term}'...")
+                else:
+                    print(f"Loading emails from the last {days_to_use} days...")
                 pythoncom.CoInitialize()
                 try:
-                    total_items = min(folder_items.Count, 10000)  # Safety limit
-                    
-                    for batch_start in range(1, total_items + 1, MAX_EMAILS):
-                        limit_reached = ""
-                        if time.time() - start_time > MAX_LOAD_TIME:
-                            limit_reached = " (MAX_LOAD_TIME reached)"
-                        elif len(emails) >= MAX_EMAILS:
-                            limit_reached = " (MAX_EMAILS reached)"
+                    for i in range(1, min(total_items + 1, MAX_EMAILS + 1)):
+                        current_time = time.time()
+                        if current_time - start_time > MAX_LOAD_TIME:
+                            limit_note = f" (MAX_LOAD_TIME reached after {processed_count} emails)"
+                            break
                         
-                        if limit_reached:
-                            return emails[:MAX_EMAILS], limit_reached
                             
-                        batch_end = min(batch_start + MAX_DAYS- 1, total_items)
-                        batch_emails = _process_email_batch(folder_items, batch_start, batch_end)
-                        emails.extend(batch_emails)
+                        if len(emails) >= MAX_EMAILS:
+                            limit_note = f" (MAX_EMAILS={MAX_EMAILS} reached)"
+                            break
+                            
+                        try:
+                            item = folder_items.Item(i)
+                            if item.Class != 43:  # Skip non-mail items
+                                continue
+                                
+                            processed_count += 1
+                            received_time = item.ReceivedTime
+                            
+                            # Stop if we've gone past the date threshold
+                            if received_time < threshold_date:
+                                break
+                                
+                            # Only process if within date range
+                            if received_time >= threshold_date:
+                                # Simple progress indicator for large folders
+                                if processed_count % 50 == 0:
+                                    if search_term:
+                                        print(f"Found {len(emails)} matching emails so far...")
+                                    else:
+                                        print(f"Loaded {processed_count} emails...")
+                                # Extract just the display name from SenderName (before first '/')
+                                sender_name = getattr(item, 'SenderName', 'Unknown Sender').split('/')[0].strip()
+                                
+                                email_data = {
+                                    'id': getattr(item, 'EntryID', ''),
+                                    'subject': getattr(item, 'Subject', 'No Subject'),
+                                    'sender': sender_name,
+                                    'sender_email': getattr(item, 'SenderEmailAddress', ''),
+                                    'received_time': str(received_time),
+                                    'unread': getattr(item, 'UnRead', False),
+                                    'to_recipients': [{'name': getattr(item, 'To', '')}],
+                                    'cc_recipients': [{'name': getattr(item, 'CC', '')}]
+                                }
+                                
+                                # Apply search filtering if search term provided
+                                if search_term:
+                                    search_lower = search_term.lower()
+                                    subject_lower = email_data['subject'].lower()
+                                    if search_lower in subject_lower:
+                                        emails.append(email_data)
+                                        email_cache[email_data['id']] = email_data
+                                else:
+                                    emails.append(email_data)
+                                    email_cache[email_data['id']] = email_data
+                                
+                                
+                        except Exception as e:
+                            continue  # Skip problematic emails
                 finally:
                     pythoncom.CoUninitialize()
                     
-                if len(emails) >= MAX_EMAILS:
-                    limit_note = " (MAX_EMAILS reached)"
+                
                 return emails[:MAX_EMAILS], limit_note
                 
             except Exception as e:
@@ -96,80 +130,52 @@ def get_emails_from_folder(
                 if retry_count > 2:
                     raise RuntimeError(f"Failed after {retry_count} retries: {str(e)}")
 
-def _apply_search_filter(folder_items, search_term: str, match_all: bool = True):
-    """Apply search filter to folder items
-    
-    Args:
-        folder_items: Outlook folder items to filter
-        search_term: Term(s) to search for
-        match_all: If True (default), all terms must match (AND logic)
-                  If False, any term can match (OR logic)
-    """
-    terms = search_term.split()
-    if not terms:
-        return folder_items
-        
-    if len(terms) == 1:
-        filter_term = f"@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{terms[0]}%'"
-    else:
-        conditions = []
-        for term in terms:
-            conditions.append(f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'")
-            
-        join_op = " AND " if match_all else " OR "
-        filter_term = f"@SQL={join_op.join(conditions)}"
-        
-    return folder_items.Restrict(filter_term)
 
-def _process_email_batch(folder_items, start: int, end: int) -> List[Dict]:
-    """Process a batch of emails and update cache"""
-    batch_emails = []
-    for i in range(start, end + 1):
-        try:
-            item = folder_items.Item(i)
-            if item.Class != 43:  # Skip non-mail items
-                continue
-                
-            email_data = {
-                'id': getattr(item, 'EntryID', ''),
-                'subject': getattr(item, 'Subject', 'No Subject'),
-                'sender': getattr(item, 'SenderName', 'Unknown Sender'),
-                'sender_email': getattr(item, 'SenderEmailAddress', ''),
-                'received_time': str(getattr(item, 'ReceivedTime', '')),
-                'date': str(getattr(item, 'ReceivedTime', '')),  # Backward compat
-                'unread': getattr(item, 'UnRead', False),
-                'has_attachments': getattr(item, 'Attachments', False).Count > 0,
-                'size': getattr(item, 'Size', 0),
-                'body': getattr(item, 'Body', '')[:1000],
-                'to_recipients': [
-                    {
-                        'name': getattr(r, 'Name', ''),
-                        'address': getattr(r, 'Address', '').split('/')[-1],
-                        'type': getattr(r, 'Type', 1)  # 1=To, 2=CC
-                    }
-                    for r in getattr(item, 'Recipients', [])
-                    if hasattr(r, 'Address') or hasattr(r, 'Name')
-                ],
-                'cc_recipients': [
-                    {
-                        'name': getattr(r, 'Name', ''),
-                        'address': getattr(r, 'Address', '').split('/')[-1],
-                        'type': getattr(r, 'Type', 2)  # 1=To, 2=CC
-                    }
-                    for r in getattr(item, 'Recipients', [])
-                    if hasattr(r, 'Address') or hasattr(r, 'Name')
-                ]
-            }
-            batch_emails.append(email_data)
+def _process_email_item(item) -> Optional[Dict]:
+    """Process a single email item and update cache"""
+    try:
+        if item.Class != 43:  # Skip non-mail items
+            return None
             
-            # Update cache
-            if email_data['id']:
-                email_cache[email_data['id']] = email_data
-                
-        except Exception as e:
-            continue  # Skip problematic emails
+        email_data = {
+            'id': getattr(item, 'EntryID', ''),
+            'subject': getattr(item, 'Subject', 'No Subject'),
+            'sender': getattr(item, 'SenderName', 'Unknown Sender'),
+            'sender_email': getattr(item, 'SenderEmailAddress', ''),
+            'received_time': str(getattr(item, 'ReceivedTime', '')),
+            'date': str(getattr(item, 'ReceivedTime', '')),  # Backward compat
+            'unread': getattr(item, 'UnRead', False),
+            'has_attachments': getattr(item, 'Attachments', False).Count > 0,
+            'size': getattr(item, 'Size', 0),
+            'body': getattr(item, 'Body', '')[:1000],
+            'to_recipients': [
+                {
+                    'name': getattr(r, 'Name', ''),
+                    'address': getattr(r, 'Address', '').split('/')[-1],
+                    'type': getattr(r, 'Type', 1)  # 1=To, 2=CC
+                }
+                for r in getattr(item, 'Recipients', [])
+                if hasattr(r, 'Address') or hasattr(r, 'Name')
+            ],
+            'cc_recipients': [
+                {
+                    'name': getattr(r, 'Name', ''),
+                    'address': getattr(r, 'Address', '').split('/')[-1],
+                    'type': getattr(r, 'Type', 2)  # 1=To, 2=CC
+                }
+                for r in getattr(item, 'Recipients', [])
+                if hasattr(r, 'Address') or hasattr(r, 'Name')
+            ]
+        }
+        
+        # Update cache
+        if email_data['id']:
+            email_cache[email_data['id']] = email_data
             
-    return batch_emails
+        return email_data
+            
+    except Exception as e:
+        return None  # Skip problematic emails
 
 def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> str:
     """Public interface for listing emails (used by CLI)
@@ -290,6 +296,9 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
         return "Error: No emails in cache. Please use list_emails or search_emails first."
     if not isinstance(page, int) or page < 1:
         return "Error: 'page' must be a positive integer"
+        
+    # Validate cache structure
+    first_email = next(iter(email_cache.values()), None)
     
     cache_items = list(email_cache.values())
     total_emails = len(cache_items)
@@ -307,9 +316,8 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
         result += f"Email #{i + 1}\n"
         result += f"Subject: {email['subject']}\n"
         
-        # Display sender name only (like CC field)
-        sender_name = email['sender'].split('/')[0].strip()
-        result += f"From: {sender_name}\n"
+        # Display sender name as-is
+        result += f"From: {email['sender']}\n"
         
         # Display TO recipients if available
         if email.get('to_recipients'):

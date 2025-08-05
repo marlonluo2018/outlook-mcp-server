@@ -49,6 +49,23 @@ class OutlookSessionManager:
             finally:
                 self._connected = False
                 
+    def is_connected(self) -> bool:
+        """Check if the session is still connected"""
+        try:
+            # Simple operation to test connection
+            if self._connected and self.outlook:
+                self.outlook.GetNamespace("MAPI").GetDefaultFolder(6).Name
+                return True
+            return False
+        except:
+            self._connected = False
+            return False
+            
+    def reconnect(self):
+        """Re-establish the Outlook connection"""
+        self._disconnect()
+        self._connect()
+                 
     def get_folder(self, folder_name: Optional[str] = None):
         """Get specified folder or default inbox"""
         try:
