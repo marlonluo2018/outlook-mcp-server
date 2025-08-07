@@ -28,7 +28,7 @@ def get_folder_list_tool() -> dict:
     return {
         "content": [{
             "type": "text",
-            "text": list_folders
+            "text": list_folders()
         }]
     }
 
