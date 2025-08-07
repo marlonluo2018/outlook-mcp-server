@@ -209,8 +209,7 @@ def search_emails(
         Formatted string with count and note
     """
     if ':' in str(query):
-        raise ValueError("Field-specific searches (using ':') are not supported. "
-                       "Use plain text search terms only.")
+        raise ValueError("Search terms cannot contain colons (:). Please use plain text only.")
     
     if not query or not isinstance(query, str):
         raise ValueError("Search term must be a non-empty string")

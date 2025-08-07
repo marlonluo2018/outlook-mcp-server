@@ -83,23 +83,24 @@ def interactive_mode():
                 days = input("Enter number of days (1-30): ").strip()
                 folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
                 try:
-                    result = list_recent_emails(folder, int(days))
+                    days_int = int(days)
+                    result = list_recent_emails(folder, days_int)
                     print(result)
-                except ValueError:
-                    print("Invalid days input - must be a number")
+                except ValueError as e:
+                    print(f"Error: {str(e)}")
                     
             elif choice == "3":
                 # Search emails
                 term = input("Enter search term: ").strip()
-                days_input = input("Enter number of days (1-30): ").strip()
+                days_input = input("Enter number of days (1-30, leave blank for all): ").strip()
                 folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
                 match_all = input("Match all terms? (y/n, default=y): ").strip().lower() != 'n'
                 try:
                     days = int(days_input) if days_input else None
                     result = search_emails(term, days, folder, match_all)
                     print(result)
-                except ValueError:
-                    print("Invalid days input - must be a number")
+                except ValueError as e:
+                    print(f"Error: {str(e)}")
                 
             elif choice == "4":
                 # View email cache with pagination
