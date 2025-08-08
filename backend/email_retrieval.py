@@ -94,6 +94,7 @@ def get_emails_from_folder(
                                 # Extract just the display name from SenderName (before first '/')
                                 sender_name = getattr(item, 'SenderName', 'Unknown Sender').split('/')[0].strip()
                                 
+                                
                                 email_data = {
                                     'id': getattr(item, 'EntryID', ''),
                                     'subject': getattr(item, 'Subject', 'No Subject'),
@@ -137,6 +138,7 @@ def _process_email_item(item) -> Optional[Dict]:
         if item.Class != 43:  # Skip non-mail items
             return None
             
+        
         email_data = {
             'id': getattr(item, 'EntryID', ''),
             'subject': getattr(item, 'Subject', 'No Subject'),
@@ -304,6 +306,7 @@ def get_email_by_number(email_number: int) -> Optional[Dict]:
 
 # Keep alias for backward compatibility
 get_email_details = get_email_by_number
+
 
 
 def view_email_cache(page: int = 1, per_page: int = 5) -> str:

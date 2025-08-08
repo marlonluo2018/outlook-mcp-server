@@ -1,5 +1,5 @@
 from typing import List, Optional
-from mcp.server.fastmcp import FastMCP, Context
+from fastmcp import FastMCP
 from backend.outlook_session import OutlookSessionManager
 from backend.email_retrieval import (
     list_folders,
@@ -17,7 +17,7 @@ from backend.email_composition import (
 mcp = FastMCP("outlook-assistant")
 
 # MCP Tools - Imported from outlook_operations
-@mcp.tool()
+@mcp.tool
 def get_folder_list_tool() -> dict:
     """Lists all Outlook mail folders as a string representation of a list.
     
@@ -32,7 +32,7 @@ def get_folder_list_tool() -> dict:
         }]
     }
 
-@mcp.tool()
+@mcp.tool
 def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) -> dict:
    
     """Gets email count and page 1 preview (5 emails).
@@ -61,7 +61,7 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
             "text": combined_result
         }]
     }
-@mcp.tool()
+@mcp.tool
 def search_emails_tool(
     search_term: str,
     days: int = 7,
@@ -105,7 +105,7 @@ def search_emails_tool(
         }]
     }
 
-@mcp.tool()
+@mcp.tool
 def view_email_cache_tool(page: int = 1) -> dict:
     """
     View basic information of cached emails (5 emails per page).
@@ -131,7 +131,7 @@ def view_email_cache_tool(page: int = 1) -> dict:
         }]
     }
 
-@mcp.tool()
+@mcp.tool
 def get_email_by_number_tool(email_number: int) -> dict:
     """
     Get full email content including body and attachments by its cache number.
@@ -176,7 +176,7 @@ def get_email_by_number_tool(email_number: int) -> dict:
             "isError": True
         }
 
-@mcp.tool()
+@mcp.tool
 def reply_to_email_by_number_tool(
     email_number: int,
     reply_text: str,
@@ -227,7 +227,7 @@ def reply_to_email_by_number_tool(
         }]
     }
 
-@mcp.tool()
+@mcp.tool
 def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: Optional[str] = None) -> dict:
     """
     IMPORTANT: You MUST get explicit user confirmation before calling this tool.
@@ -263,6 +263,7 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
             "text": result
         }]
     }
+
 
 # Run the server
 if __name__ == "__main__":

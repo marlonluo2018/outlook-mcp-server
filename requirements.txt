@@ -1,2 +1,2 @@
-fastmcp==0.4.1
+fastmcp==2.11.0
 pywin32==306
