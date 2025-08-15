@@ -86,9 +86,8 @@ Note: For LLM integration, use the MCP server interface instead.
 
 ```bash
 # Install development dependencies
-pip install -r requirements-dev.txt
-
-## 🔧 Configuration
+pip install -e ".[dev]"
+```
 
 ### Environment Variables
 ```bash
@@ -315,7 +314,7 @@ git clone https://github.com/marlonluo2018/outlook-mcp-server.git
 cd outlook-mcp-server
 
 # Install development dependencies
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 
 
 

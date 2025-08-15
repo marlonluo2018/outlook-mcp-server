@@ -70,14 +70,24 @@ def send_batch_emails(
             
             for i, batch in enumerate(batches, 1):
                 try:
-                    mail = template.Forward()
+                    # Create a regular mail item instead of using Forward()
+                    mail = session.outlook.CreateItem(0)  # 0 = olMailItem
+                    
+                    # Copy relevant properties from template
+                    mail.Subject = f"FW: {template.Subject}"
                     mail.BCC = "; ".join(batch)
                     
-                    if custom_text:
-                        if hasattr(mail, 'HTMLBody') and mail.HTMLBody:
-                            mail.HTMLBody = f"<div>{custom_text}</div>" + mail.HTMLBody
+                    # Copy body content from template
+                    if hasattr(template, 'HTMLBody') and template.HTMLBody:
+                        if custom_text:
+                            mail.HTMLBody = f"<div>{custom_text}</div><br><br>" + template.HTMLBody
                         else:
-                            mail.Body = custom_text + "\n\n" + mail.Body
+                            mail.HTMLBody = template.HTMLBody
+                    else:
+                        if custom_text:
+                            mail.Body = custom_text + "\n\n" + template.Body
+                        else:
+                            mail.Body = template.Body
                     
                     mail.Send()
                     results.append(f"Batch {i} sent to {len(batch)} recipients")
