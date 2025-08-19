@@ -22,14 +22,12 @@ def get_folder_list_tool() -> dict:
     """Lists all Outlook mail folders as a string representation of a list.
     
     Returns:
-        dict: MCP response with format {"content": [{"type": "text", "text": "['Inbox', 'Sent', ...]"}]}
+        dict: MCP response with format {"type": "text", "text": "['Inbox', 'Sent', ...]"}
         
     """
     return {
-        "content": [{
-            "type": "text",
-            "text": list_folders()
-        }]
+        "type": "text",
+        "text": list_folders()
     }
 
 @mcp.tool
@@ -44,10 +42,8 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
     Returns:
         dict: Combined results in format:
         {
-            "content": [{
-                "type": "text",
-                "text": "Count: X\n\nPreview: Y"
-            }]
+            "type": "text",
+            "text": "Count: X\n\nPreview: Y"
         }
     """
     if not isinstance(days, int):
@@ -56,10 +52,8 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
     preview_result = view_email_cache(1)
     combined_result = f"{count_result}\n\n{preview_result}"
     return {
-        "content": [{
-            "type": "text",
-            "text": combined_result
-        }]
+        "type": "text",
+        "text": combined_result
     }
 @mcp.tool
 def search_emails_tool(
@@ -79,12 +73,10 @@ def search_emails_tool(
                   If False, matches ANY search term (OR logic)
 
     Returns:
-        dict: Response containing email count and previews in content field
+        dict: Response containing email count and previews
         {
-            "content": [{
-                "type": "text",
-                "text": "Count: X\n\nPreview: Y"
-            }]
+            "type": "text",
+            "text": "Count: X\n\nPreview: Y"
         }
 
     """
@@ -99,10 +91,8 @@ def search_emails_tool(
     result = search_emails(search_term, days, folder_name, match_all=match_all)
     preview = view_email_cache(1)
     return {
-        "content": [{
-            "type": "text",
-            "text": f"{result}\n\n{preview}"
-        }]
+        "type": "text",
+        "text": f"{result}\n\n{preview}"
     }
 
 @mcp.tool
@@ -115,20 +105,16 @@ def view_email_cache_tool(page: int = 1) -> dict:
         page: Page number to view (1-based, each page contains 5 emails)
         
     Returns:
-        dict: Response containing email previews in content field
+        dict: Response containing email previews
         {
-            "content": [{
-                "type": "text",
-                "text": "Formatted email previews here"
-            }]
+            "type": "text",
+            "text": "Formatted email previews here"
         }
     """
     result = view_email_cache(page)
     return {
-        "content": [{
-            "type": "text",
-            "text": result
-        }]
+        "type": "text",
+        "text": result
     }
 
 @mcp.tool
@@ -141,12 +127,10 @@ def get_email_by_number_tool(email_number: int) -> dict:
         email_number: The number of the email in the cache (1-based)
         
     Returns:
-        dict: Response containing full email details in content field
+        dict: Response containing full email details
         {
-            "content": [{
-                "type": "text",
-                "text": "Full email details here"
-            }]
+            "type": "text",
+            "text": "Full email details here"
         }
         
     Raises:
@@ -162,18 +146,13 @@ def get_email_by_number_tool(email_number: int) -> dict:
             raise ValueError("No email found at that position. Please load emails first using list_recent_emails or search_emails.")
             
         return {
-            "content": [{
-                "type": "text",
-                "text": result
-            }]
+            "type": "text",
+            "text": result
         }
     except ValueError as e:
         return {
-            "content": [{
-                "type": "text",
-                "text": f"Error: {str(e)}"
-            }],
-            "isError": True
+            "type": "text",
+            "text": f"Error: {str(e)}"
         }
 
 @mcp.tool
@@ -203,12 +182,10 @@ def reply_to_email_by_number_tool(
           * Any None parameters will result in empty recipient fields
 
     Returns:
-        dict: Response containing confirmation message in content field
+        dict: Response containing confirmation message
         {
-            "content": [{
-                "type": "text",
-                "text": "Confirmation message here"
-            }]
+            "type": "text",
+            "text": "Confirmation message here"
         }
     """
     if not isinstance(email_number, int) or email_number < 1:
@@ -221,10 +198,8 @@ def reply_to_email_by_number_tool(
         raise ValueError("CC recipients must be a list or None")
     result = reply_to_email_by_number(email_number, reply_text, to_recipients, cc_recipients)
     return {
-        "content": [{
-            "type": "text",
-            "text": result
-        }]
+        "type": "text",
+        "text": result
     }
 
 @mcp.tool
@@ -242,12 +217,10 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
         cc_email: Optional CC email address
         
     Returns:
-        dict: Response containing confirmation message in content field
+        dict: Response containing confirmation message
         {
-            "content": [{
-                "type": "text",
-                "text": "Confirmation message here"
-            }]
+            "type": "text",
+            "text": "Confirmation message here"
         }
     """
     if not recipient_email or not isinstance(recipient_email, str):
@@ -258,10 +231,8 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
         raise ValueError("Body must be a non-empty string")
     result = compose_email([recipient_email], subject, body, [cc_email] if cc_email else None)
     return {
-        "content": [{
-            "type": "text",
-            "text": result
-        }]
+        "type": "text",
+        "text": result
     }
 
 
