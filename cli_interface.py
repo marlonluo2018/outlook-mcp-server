@@ -201,7 +201,7 @@ def interactive_mode():
                         
                     csv_path = input("Enter path to CSV file: ").strip()
                     custom_text = input("Enter custom text to prepend (optional): ").strip()
-                    print(send_batch_emails(num, csv_path, custom_text))
+                    print("\n" + send_batch_emails(num, csv_path, custom_text))
                 except ValueError:
                     print("\nInvalid input - must be a number")
                 

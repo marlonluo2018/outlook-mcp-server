@@ -79,13 +79,15 @@ def send_batch_emails(
                     
                     # Copy body content from template
                     if hasattr(template, 'HTMLBody') and template.HTMLBody:
+                        mail.BodyFormat = 2  # 2 = olFormatHTML
                         if custom_text:
                             mail.HTMLBody = f"<div>{custom_text}</div><br><br>" + template.HTMLBody
                         else:
                             mail.HTMLBody = template.HTMLBody
                     else:
+                        mail.BodyFormat = 1  # 1 = olFormatPlain
                         if custom_text:
-                            mail.Body = custom_text + "\n\n" + template.Body
+                            mail.Body = custom_text + "\n\n-----Original Email-----\n\n" + template.Body
                         else:
                             mail.Body = template.Body
                     
