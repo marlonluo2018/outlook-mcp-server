@@ -144,10 +144,31 @@ def get_email_by_number_tool(email_number: int) -> dict:
         result = get_email_by_number(email_number)
         if result is None:
             raise ValueError("No email found at that position. Please load emails first using list_recent_emails or search_emails.")
+        
+        # Format the email details in a specific order
+        formatted_text = f"""Subject: {result.get('subject', 'No Subject')}
+From: {result.get('sender', 'Unknown Sender')}"""
+        
+        if result.get('to'):
+            formatted_text += f"\nTo: {result.get('to')}"
+        
+        if result.get('cc'):
+            formatted_text += f"\nCC: {result.get('cc')}"
+        
+        formatted_text += f"""
+Date: {result.get('received_time', 'Unknown Date')}
+
+Body:
+{result.get('body', 'No body content')}"""
+        
+        if result.get('attachments'):
+            formatted_text += "\n\nAttachments:"
+            for attach in result['attachments']:
+                formatted_text += f"\n- {attach.get('name', 'Unknown')} ({attach.get('size', 0)} bytes)"
             
         return {
             "type": "text",
-            "text": result
+            "text": formatted_text
         }
     except ValueError as e:
         return {
