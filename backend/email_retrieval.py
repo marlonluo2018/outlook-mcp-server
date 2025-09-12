@@ -270,10 +270,14 @@ def get_email_by_number(email_number: int) -> Optional[Dict]:
         'has_attachments': email.get('has_attachments', False),
         'size': email.get('size', 0),
         'body': email.get('body', ''),
-        'to_recipients': [
+        'to': ', '.join([
             r.get('name', '') if isinstance(r, dict) else str(r)
             for r in email.get('to_recipients', [])
-        ],
+        ]) if email.get('to_recipients') else '',
+        'cc': ', '.join([
+            r.get('name', '') if isinstance(r, dict) else str(r)
+            for r in email.get('cc_recipients', [])
+        ]) if email.get('cc_recipients') else '',
         'attachments': email.get('attachments', [])
     }
     

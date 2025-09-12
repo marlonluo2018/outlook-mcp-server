@@ -148,7 +148,11 @@ def interactive_mode():
                         print("\nFull email details:")
                         print(f"Subject: {full_email.get('subject')}")
                         print(f"From: {full_email.get('sender')}")
-                        print(f"Date: {full_email.get('received')}")
+                        if full_email.get('to'):
+                            print(f"To: {full_email.get('to')}")
+                        if full_email.get('cc'):
+                            print(f"CC: {full_email.get('cc')}")
+                        print(f"Date: {full_email.get('received_time')}")
                         print(f"\nBody:\n{full_email.get('body')}")
                         if full_email.get('attachments'):
                             print("\nAttachments:")
