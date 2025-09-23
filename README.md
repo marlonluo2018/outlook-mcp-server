@@ -29,8 +29,8 @@ The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook,
 
 ### Dependencies
 
-- `fastmcp`: MCP server framework
-- `pywin32`: Windows COM automation
+- `fastmcp==2.11.0`: MCP server framework
+- `pywin32==306`: Windows COM automation
 - Standard library: `argparse`, `csv`, `datetime`, `logging`, `typing`
 
 ## 🛠️ Installation
@@ -358,9 +358,53 @@ Operation → Try/Catch → Retry Logic → User-friendly Error → Logging
 - **Garbage Collection**: Automatic cleanup of COM objects
 - **Resource Limits**: Configurable maximum email processing limits
 
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**Outlook Not Found**
+```
+Error: Outlook application not found or not accessible
+```
+- Ensure Outlook is installed and running
+- Check that Outlook COM interface is enabled
+- Run Outlook as administrator if needed
+
+**COM Permission Errors**
+```
+Error: Access denied or COM server not available
+```
+- Check Windows COM security settings
+- Ensure your user account has Outlook access
+- Try running the script as administrator
+
+**Email Loading Issues**
+```
+Error: Timeout loading emails or Operation took too long
+```
+- Reduce the number of days or search scope
+- Check if Outlook has large folders that need indexing
+- Try searching specific folders instead of entire mailbox
+
+**Cache Not Working**
+```
+Error: No emails in cache or Invalid cache item
+```
+- Always run list/search operations first to populate cache
+- Cache clears when new list/search operations are performed
+- Use view_email_cache to verify cache contents
+
 ## 📋 Changelog
 
-### v1.0.0 (Current)
+### v1.1.0 (Current)
+- **Enhanced Email Details**: Improved email data structure with recipient information
+- **Better Body Formatting**: Enhanced email body formatting for replies and batch operations
+- **MCP Response Refactoring**: Simplified response structure by removing unnecessary wrappers
+- **Improved Error Handling**: Better input validation and error messages
+- **Project Configuration**: Added pyproject.toml for proper project management
+- **Code Quality**: Refactored email retrieval functions for improved readability
+
+### v1.0.0
 - **Initial Release**: Complete MCP server implementation
 - **Core Features**: Email retrieval, search, composition, and batch operations
 - **Security**: User confirmation for email sending
