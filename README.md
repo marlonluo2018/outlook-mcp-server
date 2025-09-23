@@ -358,33 +358,6 @@ Operation → Try/Catch → Retry Logic → User-friendly Error → Logging
 - **Garbage Collection**: Automatic cleanup of COM objects
 - **Resource Limits**: Configurable maximum email processing limits
 
-## 🤝 Contributing
-
-### Development Setup
-
-```bash
-# Fork and clone
-git clone https://github.com/marlonluo2018/outlook-mcp-server.git
-cd outlook-mcp-server
-
-# Install development dependencies
-pip install -e ".[dev]"
-
-
-
-### Pull Request Guidelines
-1. **Tests**: Add tests for new functionality
-2. **Documentation**: Update README for API changes
-3. **Error Handling**: Include proper error handling
-4. **Performance**: Consider impact on large email volumes
-5. **Security**: Validate all user inputs
-
-### Code Style
-- **PEP 8**: Follow Python style guidelines
-- **Type Hints**: Use typing module for all functions
-- **Docstrings**: Google-style docstrings for all public APIs
-- **Error Messages**: User-friendly error messages
-
 ## 📋 Changelog
 
 ### v1.0.0 (Current)
