@@ -1,5 +1,8 @@
 # Outlook MCP Server
 
+> **⚠️ Windows-Only Application**  
+> This MCP server requires Windows 10/11 and Microsoft Outlook due to COM automation dependencies.
+
 A comprehensive Model Context Protocol (MCP) server that provides secure, efficient access to Microsoft Outlook functionality through Python COM automation. This server enables AI assistants and applications to interact with Outlook emails, folders, and contacts programmatically while maintaining enterprise-grade security and performance.
 
 ## 🚀 Overview
