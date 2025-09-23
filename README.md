@@ -92,15 +92,6 @@ Note: For LLM integration, use the MCP server interface instead.
 pip install -e ".[dev]"
 ```
 
-### Environment Variables
-```bash
-# Optional: Set log level
-export OUTLOOK_MCP_LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR
-
-# Optional: Set cache timeout
-export OUTLOOK_MCP_CACHE_TIMEOUT=300  # seconds
-```
-
 ### Configuration Constants
 
 Located in `backend/shared.py`:
@@ -117,43 +108,103 @@ Located in `backend/shared.py`:
 
 ### MCP Server Mode (For LLM Tool Calls)
 
-**Tool Call Sequence**:
+**🔄 How to Use with AI Assistants**:
 
-1. First call either:
-   - `list_recent_emails_tool` to load recent emails into cache
-   - `search_emails_tool` to load matching emails into cache
-2. Then call `view_email_cache_tool` to identify specific email to work with
-3. LLM drafts reply content based on cached email
-4. Finally call `reply_to_email_by_number_tool` (requires user confirmation)
+**Step 1: Load Your Emails**  
+Ask your AI assistant to:  
+- "Show me recent emails from my Inbox"  
+- "Search for emails about project updates"  
+- "Find emails from the last 2 weeks"
 
-**Key Points**:
+This loads your emails into a temporary cache.
 
-- All operations work with the email cache
-- Write operations require explicit user confirmation
-- Cache is automatically refreshed on new list/search
+**Step 2: Browse Available Emails**  
+Ask your AI assistant to:  
+- "Show me the emails you found"  
+- "Display page 2 of the email list"  
+- "What emails are in my cache?"
 
-### CLI Interface Workflow
+This shows you a list of available emails with numbers.
 
-The CLI interface follows a strict email cache workflow:
+**Step 3: View Specific Email**  
+Tell your AI assistant:  
+- "Show me email number 3"  
+- "Get the full content of email 5"  
+- "Display email about the meeting"
 
-1. **Cache Population**:
-   - List or search operations load emails into memory cache
-   - Cache contains email metadata and partial content
+This retrieves the complete email for you to review.
 
-2. **Cache Operations**:
-   - View full email details from cache
-   - Reply to cached emails
-   - Use cached emails as templates
+**Step 4: Take Action**  
+Ask your AI assistant to:  
+- "Reply to email 3 with: Thanks for the update!"  
+- "Compose a new email to my team"  
+- "Forward email 7 to my manager"
 
-3. **Cache Management**:
-   - Cache automatically refreshes on new list/search
-   - In-memory only - no persistent storage
-   - Limited to most recent 1000 emails
+**⚠️ Important Notes**:
 
+- **Cache System**: Each time you search or list emails, the previous cache is cleared
+- **Email Numbers**: Always refer to email numbers shown in the current cache
+- **Your Approval**: The AI will always ask for your confirmation before sending any emails
+- **Temporary Storage**: Email cache is only in memory - nothing is saved permanently
+
+### CLI Interface (For Direct Human Use)
+
+**🖥️ How to Use the Interactive Menu System**:
+
+**Getting Started**:
 ```bash
-# Start interactive session
+# Start the interactive email session
 python cli_interface.py
 ```
+
+**🔄 Step-by-Step Workflow**:
+
+**Step 1: Load Emails into Cache**  
+Start by choosing one of these options:  
+- **Menu Option 2**: List recent emails (specify days and folder)  
+- **Menu Option 3**: Search emails (enter search terms and filters)  
+
+This clears any previous cache and loads your selected emails.
+
+**Step 2: Browse Available Emails**  
+Use **Menu Option 4** to:  
+- View all emails currently in your cache  
+- See a numbered list with subjects and senders  
+- Navigate through multiple pages if needed  
+- Note the email number you want to work with
+
+**Step 3: View Email Details**  
+Use **Menu Option 5** to:  
+- Enter the email number you want to read  
+- See the complete email content  
+- Check attachments and recipient details  
+
+**Step 4: Take Action on Email**  
+Choose your action:  
+- **Menu Option 6**: Reply to the email (enter email number)  
+- **Menu Option 7**: Compose a new email  
+- **Menu Option 8**: Send batch emails (using cached email as template)  
+
+**📋 Common Usage Patterns**:
+
+**To reply to an email**: 2 → 4 → 5 → 6  
+(List emails → View cache → Read email → Reply)
+
+**To search and respond**: 3 → 4 → 5 → 6  
+(Search emails → View cache → Read email → Reply)
+
+**To send batch emails**: 2 → 4 → 8  
+(List emails → View cache → Send batch)
+
+**⚠️ Important Notes**:
+
+- **Cache Management**: Each time you use Option 2 or 3, the cache is cleared and reloaded
+- **Email Numbers**: Always use the numbers shown in the current cache (Option 4)
+- **Your Confirmation**: The system asks for confirmation before sending any emails
+- **Session-Based**: Cache persists until you exit or load new emails
+- **Menu Navigation**: Use Option 0 to exit safely
+
+**Best for**: Users who prefer direct, menu-driven control over email operations or need batch email capabilities.
 
 ### Available Tools
 
