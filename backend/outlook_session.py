@@ -69,7 +69,8 @@ class OutlookSessionManager:
     def get_folder(self, folder_name: Optional[str] = None):
         """Get specified folder or default inbox"""
         try:
-            if not folder_name:
+            # Handle string "null" as well as actual None
+            if not folder_name or folder_name == "null":
                 return self.namespace.GetDefaultFolder(6)  # 6 = olFolderInbox
             return self._get_folder_by_name(folder_name)
         except Exception as e:
