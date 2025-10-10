@@ -202,7 +202,7 @@ def search_emails(
     """Public interface for searching emails (used by CLI)
     
     Args:
-        query: Search term to match in email subjects
+        query: Search term to match in email subjects (colons are allowed as part of regular text)
         days: Optional number of days to filter by
         folder_name: Optional folder name to search in
         match_all: If True (default), all terms must match (AND logic)
@@ -210,9 +210,6 @@ def search_emails(
     Returns:
         Formatted string with count and note
     """
-    if ':' in str(query):
-        raise ValueError("Search terms cannot contain colons (:). Please use plain text only.")
-    
     if not query or not isinstance(query, str):
         raise ValueError("Search term must be a non-empty string")
     

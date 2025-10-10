@@ -66,7 +66,7 @@ def search_emails_tool(
     Search emails return count and page 1 preview (5 emails).
     
     Args:
-        search_term: Plain text search term (no field prefixes allowed)
+        search_term: Plain text search term (colons are allowed as part of regular text)
         days: Number of days to look back (default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox)
         match_all: If True, requires ALL search terms to match (AND logic, default).
@@ -80,10 +80,6 @@ def search_emails_tool(
         }
 
     """
-    if ':' in search_term:
-        raise ValueError("Field-specific searches (using ':') are not supported. "
-                       "Use plain text search terms only.")
-    
     if not search_term or not isinstance(search_term, str):
         raise ValueError("Search term must be a non-empty string")
     if not isinstance(days, int):
