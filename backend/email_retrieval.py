@@ -365,3 +365,111 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
     result += "\nCall get_email_details_tool() to get full content of the email."
     
     return result
+
+# Add specialized search functions for MCP server compatibility
+def search_email_by_subject(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> tuple[List[Dict], str]:
+    """Search emails by subject and return list of emails with note
+    
+    Args:
+        search_term: Search term to match in email subjects
+        days: Number of days to look back (default: 7)
+        folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True (default), all terms must match (AND logic)
+                  If False, any term can match (OR logic)
+    
+    Returns:
+        Tuple of (email list, note string)
+    """
+    return get_emails_from_folder(
+        search_term=search_term,
+        days=days,
+        folder_name=folder_name,
+        match_all=match_all
+    )
+
+def search_email_by_from(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> tuple[List[Dict], str]:
+    """Search emails by sender name and return list of emails with note
+    
+    Args:
+        search_term: Search term to match in sender name
+        days: Number of days to look back (default: 7)
+        folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True (default), all terms must match (AND logic)
+                  If False, any term can match (OR logic)
+    
+    Returns:
+        Tuple of (email list, note string)
+    """
+    # Get all emails from the specified folder and time period
+    emails, note = get_emails_from_folder(
+        search_term=None,  # Don't filter by subject
+        days=days,
+        folder_name=folder_name
+    )
+    
+    # Filter by sender name
+    if search_term:
+        search_lower = search_term.lower()
+        filtered_emails = []
+        
+        for email in emails:
+            sender_name = email.get('sender', '').lower()
+            if search_lower in sender_name:
+                filtered_emails.append(email)
+        
+        return filtered_emails, note
+    
+    return emails, note
+
+def search_email_by_to(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> tuple[List[Dict], str]:
+    """Search emails by recipient name and return list of emails with note
+    
+    Args:
+        search_term: Search term to match in recipient name
+        days: Number of days to look back (default: 7)
+        folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True (default), all terms must match (AND logic)
+                  If False, any term can match (OR logic)
+    
+    Returns:
+        Tuple of (email list, note string)
+    """
+    # Get all emails from the specified folder and time period
+    emails, note = get_emails_from_folder(
+        search_term=None,  # Don't filter by subject
+        days=days,
+        folder_name=folder_name
+    )
+    
+    # Filter by recipient name
+    if search_term:
+        search_lower = search_term.lower()
+        filtered_emails = []
+        
+        for email in emails:
+            # Check TO recipients
+            to_recipients = email.get('to_recipients', [])
+            for recipient in to_recipients:
+                recipient_name = recipient.get('name', '').lower()
+                if search_lower in recipient_name:
+                    filtered_emails.append(email)
+                    break  # Found match, no need to check other recipients
+        
+        return filtered_emails, note
+    
+    return emails, note
