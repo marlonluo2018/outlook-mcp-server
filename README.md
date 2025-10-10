@@ -113,8 +113,10 @@ Located in `backend/shared.py`:
 **Step 1: Load Your Emails**  
 Ask your AI assistant to:  
 - "Show me recent emails from my Inbox"  
-- "Search for emails about project updates"  
-- "Find emails from the last 2 weeks"
+- "Search for email subjects about project updates"  
+- "Find emails from the last 2 weeks"  
+- "Search for emails from John Doe"  
+- "Search for emails sent to Team Name"
 
 This loads your emails into a temporary cache.
 
@@ -162,44 +164,52 @@ python cli_interface.py
 **Step 1: Load Emails into Cache**  
 Start by choosing one of these options:  
 - **Menu Option 2**: List recent emails (specify days and folder)  
-- **Menu Option 3**: Search emails (enter search terms and filters)  
+- **Menu Option 3**: Search email subjects (enter search terms and filters)  
+- **Menu Option 4**: Search emails by sender name (enter sender name)  
+- **Menu Option 5**: Search emails by recipient name (enter recipient name)  
 
 This clears any previous cache and loads your selected emails.
 
 **Step 2: Browse Available Emails**  
-Use **Menu Option 4** to:  
+Use **Menu Option 6** to:  
 - View all emails currently in your cache  
 - See a numbered list with subjects and senders  
 - Navigate through multiple pages if needed  
 - Note the email number you want to work with
 
 **Step 3: View Email Details**  
-Use **Menu Option 5** to:  
+Use **Menu Option 7** to:  
 - Enter the email number you want to read  
 - See the complete email content  
 - Check attachments and recipient details  
 
 **Step 4: Take Action on Email**  
 Choose your action:  
-- **Menu Option 6**: Reply to the email (enter email number)  
-- **Menu Option 7**: Compose a new email  
-- **Menu Option 8**: Send batch emails (using cached email as template)  
+- **Menu Option 8**: Reply to the email (enter email number)  
+- **Menu Option 9**: Compose a new email  
+- **Menu Option 10**: Send batch emails (using cached email as template)  
 
 **📋 Common Usage Patterns**:
 
-**To reply to an email**: 2 → 4 → 5 → 6  
+**To reply to an email**: 2 → 6 → 7 → 8  
 (List emails → View cache → Read email → Reply)
 
-**To search and respond**: 3 → 4 → 5 → 6  
-(Search emails → View cache → Read email → Reply)
+**To search and respond**: 3 → 6 → 7 → 8  
+(Search email subjects → View cache → Read email → Reply)
 
-**To send batch emails**: 2 → 4 → 8  
+**To search by sender name and respond**: 4 → 6 → 7 → 8  
+(Search by sender name → View cache → Read email → Reply)
+
+**To search by recipient name and respond**: 5 → 6 → 7 → 8  
+(Search by recipient name → View cache → Read email → Reply)
+
+**To send batch emails**: 2 → 6 → 10  
 (List emails → View cache → Send batch)
 
 **⚠️ Important Notes**:
 
-- **Cache Management**: Each time you use Option 2 or 3, the cache is cleared and reloaded
-- **Email Numbers**: Always use the numbers shown in the current cache (Option 4)
+- **Cache Management**: Each time you use Option 2, 3, 4, or 5, the cache is cleared and reloaded
+- **Email Numbers**: Always use the numbers shown in the current cache (Option 6)
 - **Your Confirmation**: The system asks for confirmation before sending any emails
 - **Session-Based**: Cache persists until you exit or load new emails
 - **Menu Navigation**: Use Option 0 to exit safely
@@ -231,11 +241,11 @@ Choose your action:
 // Returns count and first page preview
 ```
 
-#### 3. Search Emails
+#### 3. Search Email by Subject
 
 ```json
 {
-  "tool": "search_emails_tool",
+  "tool": "search_email_by_subject_tool",
   "parameters": {
     "search_term": "meeting notes",
     "days": 14,
@@ -245,7 +255,35 @@ Choose your action:
 }
 ```
 
-#### 4. View Email Cache
+#### 4. Search Email by Sender Name
+
+```json
+{
+  "tool": "search_email_by_sender_name_tool",
+  "parameters": {
+    "search_term": "John Doe",
+    "days": 14,
+    "folder_name": "Inbox",
+    "match_all": true
+  }
+}
+```
+
+#### 5. Search Email by Recipient Name
+
+```json
+{
+  "tool": "search_email_by_recipient_name_tool",
+  "parameters": {
+    "search_term": "Team Name",
+    "days": 14,
+    "folder_name": "Inbox",
+    "match_all": true
+  }
+}
+```
+
+#### 6. View Email Cache
 
 ```json
 {
@@ -256,7 +294,7 @@ Choose your action:
 }
 ```
 
-#### 5. Get Email Details
+#### 7. Get Email Details
 
 ```json
 {
@@ -268,7 +306,7 @@ Choose your action:
 // Returns full email with body and attachments
 ```
 
-#### 6. Reply to Email
+#### 8. Reply to Email
 
 ```json
 {
@@ -283,7 +321,7 @@ Choose your action:
 // ⚠️ Requires explicit user confirmation
 ```
 
-#### 7. Compose New Email
+#### 9. Compose New Email
 
 ```json
 {
@@ -298,7 +336,7 @@ Choose your action:
 // ⚠️ Requires explicit user confirmation
 ```
 
-#### 8. Batch Email Operations (Interactive Only)
+#### 10. Batch Email Operations (Interactive Only)
 
 **Workflow**:
 
@@ -410,6 +448,21 @@ Error: No emails in cache or Invalid cache item
 - **Security**: User confirmation for email sending
 - **Performance**: Email caching and timeout handling
 - **CLI**: Interactive and command-line interfaces
+
+## ⚠️ Limitations
+
+### Email Address Search
+
+Due to Microsoft Exchange's Distinguished Name (DN) format for internal email addresses, the search functionality for sender and recipient fields has the following limitations:
+
+- **Sender/Recipient Name Search**: Only searches by display name, not email address
+- **Exchange Format**: Internal email addresses are stored in DN format (e.g., `/O=EXCHANGELABS/OU=EXCHANGE ADMINISTRATIVE GROUP...`)
+- **Workaround**: Use display names (e.g., "John Doe") instead of email addresses for sender/recipient name searches
+- **Subject Search**: Full text search still works for email subjects
+
+**Example**:
+- ✅ Correct: Search for "John Doe" in sender name field
+- ❌ Incorrect: Search for "john.doe@example.com" in sender name field
 
 ### Planned Features
 - [ ] Attachment upload/download support

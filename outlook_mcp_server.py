@@ -3,7 +3,9 @@ from fastmcp import FastMCP
 from backend.outlook_session import OutlookSessionManager
 from backend.email_retrieval import (
     list_folders,
-    search_emails,
+    search_email_by_subject,
+    search_email_by_from,
+    search_email_by_to,
     view_email_cache,
     get_email_by_number,
     list_recent_emails
@@ -56,14 +58,16 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
         "text": combined_result
     }
 @mcp.tool
-def search_emails_tool(
+def search_email_by_subject_tool(
     search_term: str,
     days: int = 7,
     folder_name: Optional[str] = None,
     match_all: bool = True
 ) -> dict:
-    """
-    Search emails return count and page 1 preview (5 emails).
+    """Search email subjects return count and page 1 preview (5 emails).
+    
+    This function only searches the email subject field. It does not search in the email body,
+    sender name, recipients, or other fields.
     
     Args:
         search_term: Plain text search term (colons are allowed as part of regular text)
@@ -84,12 +88,113 @@ def search_emails_tool(
         raise ValueError("Search term must be a non-empty string")
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
-    result = search_emails(search_term, days, folder_name, match_all=match_all)
-    preview = view_email_cache(1)
-    return {
-        "type": "text",
-        "text": f"{result}\n\n{preview}"
-    }
+    emails, note = search_email_by_subject(search_term, days, folder_name, match_all=match_all)
+    result = f"Found {len(emails)} matching emails{note}"
+    if emails:
+        preview = view_email_cache(1)
+        return {
+            "type": "text",
+            "text": f"{result}\n\n{preview}"
+        }
+    else:
+        return {
+            "type": "text",
+            "text": result
+        }
+
+@mcp.tool
+def search_email_by_sender_name_tool(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> dict:
+    """Search emails by sender name return count and page 1 preview (5 emails).
+    
+    This function only searches the sender name field. It does not search in the email body,
+    subject, recipients, or other fields.
+    
+    Search by name only, not email address.
+    
+    Args:
+        search_term: Plain text search term for sender name (colons are allowed as part of regular text)
+        days: Number of days to look back (default: 7, max: 30)
+        folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True, requires ALL search terms to match (AND logic, default).
+                  If False, matches ANY search term (OR logic)
+
+    Returns:
+        dict: Response containing email count and previews
+        {
+            "type": "text",
+            "text": "Count: X\n\nPreview: Y"
+        }
+
+    """
+    if not search_term or not isinstance(search_term, str):
+        raise ValueError("Search term must be a non-empty string")
+    if not isinstance(days, int):
+        raise ValueError("Days parameter must be an integer")
+    emails, note = search_email_by_from(search_term, days, folder_name, match_all=match_all)
+    result = f"Found {len(emails)} matching emails{note}"
+    if emails:
+        preview = view_email_cache(1)
+        return {
+            "type": "text",
+            "text": f"{result}\n\n{preview}"
+        }
+    else:
+        return {
+            "type": "text",
+            "text": result
+        }
+
+@mcp.tool
+def search_email_by_recipient_name_tool(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> dict:
+    """Search emails by recipient name return count and page 1 preview (5 emails).
+    
+    This function only searches the recipient (To) field. It does not search in the email body,
+    subject, sender, or other fields.
+    
+    Search by name only, not email address.
+    
+    Args:
+        search_term: Plain text search term for recipient name (colons are allowed as part of regular text)
+        days: Number of days to look back (default: 7, max: 30)
+        folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True, requires ALL search terms to match (AND logic, default).
+                  If False, matches ANY search term (OR logic)
+
+    Returns:
+        dict: Response containing email count and previews
+        {
+            "type": "text",
+            "text": "Count: X\n\nPreview: Y"
+        }
+
+    """
+    if not search_term or not isinstance(search_term, str):
+        raise ValueError("Search term must be a non-empty string")
+    if not isinstance(days, int):
+        raise ValueError("Days parameter must be an integer")
+    emails, note = search_email_by_to(search_term, days, folder_name, match_all=match_all)
+    result = f"Found {len(emails)} matching emails{note}"
+    if emails:
+        preview = view_email_cache(1)
+        return {
+            "type": "text",
+            "text": f"{result}\n\n{preview}"
+        }
+    else:
+        return {
+            "type": "text",
+            "text": result
+        }
 
 @mcp.tool
 def view_email_cache_tool(page: int = 1) -> dict:

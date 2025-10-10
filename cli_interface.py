@@ -8,7 +8,9 @@ try:
     from backend.outlook_session import OutlookSessionManager
     from backend.email_retrieval import (
         list_recent_emails,
-        search_emails,
+        search_email_by_subject,
+        search_email_by_from,
+        search_email_by_to,
         get_email_by_number,
         list_folders,
         view_email_cache
@@ -24,10 +26,12 @@ except ImportError:
         # Then try relative imports (module usage)
         from .backend.outlook_session import OutlookSessionManager
         from .backend.email_retrieval import (
-            search_emails,
-            get_email_by_number,
-            list_folders
-        )
+        search_email_by_subject,
+        search_email_by_from,
+        search_email_by_to,
+        get_email_by_number,
+        list_folders
+    )
         from .backend.email_composition import (
             compose_email,
             reply_to_email_by_number
@@ -39,10 +43,12 @@ except ImportError:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from backend.outlook_session import OutlookSessionManager
         from backend.email_retrieval import (
-            search_emails,
-            get_email_by_number,
-            list_folders
-        )
+        search_email_by_subject,
+        search_email_by_from,
+        search_email_by_to,
+        get_email_by_number,
+        list_folders
+    )
         from backend.email_composition import (
             compose_email,
             reply_to_email_by_number
@@ -54,12 +60,14 @@ def show_menu():
     print("\nOutlook MCP Server - Interactive Mode")
     print("1. List folders")
     print("2. List recent emails")
-    print("3. Search emails")
-    print("4. View email cache")
-    print("5. Get email details")
-    print("6. Reply to email")
-    print("7. Compose new email")
-    print("8. Send batch emails")
+    print("3. Search email subjects")
+    print("4. Search emails by sender name")
+    print("5. Search emails by recipient name")
+    print("6. View email cache")
+    print("7. Get email details")
+    print("8. Reply to email")
+    print("9. Compose new email")
+    print("10. Send batch emails")
     print("0. Exit")
 
 def interactive_mode():
@@ -90,19 +98,58 @@ def interactive_mode():
                     print(f"Error: {str(e)}")
                     
             elif choice == "3":
-                # Search emails
+                # Search email subjects
+                print("This function only searches the email subject field.")
+                print("It does not search in the email body, sender name, recipients, or other fields.")
                 term = input("Enter search term: ").strip()
                 days_input = input("Enter number of days (1-30, leave blank for all): ").strip()
                 folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
                 match_all = input("Match all terms? (y/n, default=y): ").strip().lower() != 'n'
                 try:
                     days = int(days_input) if days_input else None
-                    result = search_emails(term, days, folder, match_all)
+                    emails, note = search_email_by_subject(term, days, folder, match_all)
+                    result = f"Found {len(emails)} matching emails{note}"
+                    print(result)
+                except ValueError as e:
+                    print(f"Error: {str(e)}")
+            
+            elif choice == "4":
+                # Search emails by sender name
+                print("This function only searches the sender name field.")
+                print("It does not search in the email body, subject, recipients, or other fields.")
+                print("IMPORTANT: Due to Microsoft Exchange's Distinguished Name format for internal email addresses,")
+                print("this function only searches by display name, not email address.")
+                print("Use display names (e.g., 'John Doe') instead of email addresses (e.g., 'john.doe@example.com').")
+                term = input("Enter sender name to search for: ").strip()
+                days_input = input("Enter number of days (1-30, leave blank for all): ").strip()
+                folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
+                try:
+                    days = int(days_input) if days_input else None
+                    emails, note = search_email_by_from(term, days, folder, True)
+                    result = f"Found {len(emails)} matching emails{note}"
+                    print(result)
+                except ValueError as e:
+                    print(f"Error: {str(e)}")
+            
+            elif choice == "5":
+                # Search emails by recipient name
+                print("This function only searches the recipient (To) field.")
+                print("It does not search in the email body, subject, sender, or other fields.")
+                print("IMPORTANT: Due to Microsoft Exchange's Distinguished Name format for internal email addresses,")
+                print("this function only searches by display name, not email address.")
+                print("Use display names (e.g., 'John Doe') instead of email addresses (e.g., 'john.doe@example.com').")
+                term = input("Enter recipient name to search for: ").strip()
+                days_input = input("Enter number of days (1-30, leave blank for all): ").strip()
+                folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
+                try:
+                    days = int(days_input) if days_input else None
+                    emails, note = search_email_by_to(term, days, folder, True)
+                    result = f"Found {len(emails)} matching emails{note}"
                     print(result)
                 except ValueError as e:
                     print(f"Error: {str(e)}")
                 
-            elif choice == "4":
+            elif choice == "6":
                 # View email cache with pagination
                 try:
                     page = int(input("Enter starting page number (default: 1): ").strip() or 1)
@@ -130,7 +177,7 @@ def interactive_mode():
                     elif nav == 'q':
                         break
 
-            elif choice == "5":
+            elif choice == "7":
                 # Get full email by number
                 if not email_cache:
                     print("\nNo emails in cache - load emails first")
@@ -161,7 +208,7 @@ def interactive_mode():
                 except ValueError:
                     print("\nInvalid input - must be a number")
 
-            elif choice == "6":
+            elif choice == "8":
                 # Reply to email
                 if not email_cache:
                     print("\nNo emails in cache - load emails first")
@@ -178,7 +225,7 @@ def interactive_mode():
                 except ValueError:
                     print("\nInvalid input - must be a number")
 
-            elif choice == "7":
+            elif choice == "9":
                 # Compose new email
                 to = input("Enter To recipients (comma separated): ").strip()
                 subject = input("Enter subject: ").strip()
@@ -191,7 +238,7 @@ def interactive_mode():
                 except Exception as e:
                     print(f"Error composing email: {str(e)}")
                     
-            elif choice == "8":
+            elif choice == "10":
                 # Batch send emails
                 if not email_cache:
                     print("\nNo emails in cache - load emails first")
