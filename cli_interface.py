@@ -7,14 +7,15 @@ try:
     # First try absolute imports (direct execution)
     from backend.outlook_session import OutlookSessionManager
     from backend.email_retrieval import (
-        list_recent_emails,
-        search_email_by_subject,
-        search_email_by_from,
-        search_email_by_to,
-        get_email_by_number,
-        list_folders,
-        view_email_cache
-    )
+    list_recent_emails,
+    search_email_by_subject,
+    search_email_by_from,
+    search_email_by_to,
+    search_email_by_body,
+    get_email_by_number,
+    list_folders,
+    view_email_cache
+)
     from backend.email_composition import (
         compose_email,
         reply_to_email_by_number
@@ -29,6 +30,7 @@ except ImportError:
         search_email_by_subject,
         search_email_by_from,
         search_email_by_to,
+        search_email_by_body,
         get_email_by_number,
         list_folders
     )
@@ -46,6 +48,7 @@ except ImportError:
         search_email_by_subject,
         search_email_by_from,
         search_email_by_to,
+        search_email_by_body,
         get_email_by_number,
         list_folders
     )
@@ -63,11 +66,12 @@ def show_menu():
     print("3. Search email subjects")
     print("4. Search emails by sender name")
     print("5. Search emails by recipient name")
-    print("6. View email cache")
-    print("7. Get email details")
-    print("8. Reply to email")
-    print("9. Compose new email")
-    print("10. Send batch emails")
+    print("6. Search emails by body content")
+    print("7. View email cache")
+    print("8. Get email details")
+    print("9. Reply to email")
+    print("10. Compose new email")
+    print("11. Send batch emails")
     print("0. Exit")
 
 def interactive_mode():
@@ -148,8 +152,30 @@ def interactive_mode():
                     print(result)
                 except ValueError as e:
                     print(f"Error: {str(e)}")
-                
+            
             elif choice == "6":
+                # Search emails by body content
+                print("This function searches the email body content.")
+                print("It does not search in the subject, sender name, recipients, or other fields.")
+                print("Note: Searching email body is slower than searching other fields as it requires")
+                print("loading the full content of each email.")
+                print("\nSearch options:")
+                print("- For exact phrase matching, enclose your search term in quotes (e.g., \"red hat partner day\")")
+                print("- For word-based matching, enter terms without quotes (e.g., red hat partner day)")
+                print("- Word-based matching uses AND logic by default (all words must be present)")
+                term = input("Enter search term for email body: ").strip()
+                days_input = input("Enter number of days (1-30, leave blank for all): ").strip()
+                folder = input("Enter folder name (leave blank for Inbox): ").strip() or None
+                match_all = input("Match all terms? (y/n, default=y): ").strip().lower() != 'n'
+                try:
+                    days = int(days_input) if days_input else None
+                    emails, note = search_email_by_body(term, days, folder, match_all)
+                    result = f"Found {len(emails)} matching emails{note}"
+                    print(result)
+                except ValueError as e:
+                    print(f"Error: {str(e)}")
+                
+            elif choice == "7":
                 # View email cache with pagination
                 try:
                     page = int(input("Enter starting page number (default: 1): ").strip() or 1)
@@ -177,7 +203,7 @@ def interactive_mode():
                     elif nav == 'q':
                         break
 
-            elif choice == "7":
+            elif choice == "8":
                 # Get full email by number
                 if not email_cache:
                     print("\nNo emails in cache - load emails first")
@@ -208,7 +234,7 @@ def interactive_mode():
                 except ValueError:
                     print("\nInvalid input - must be a number")
 
-            elif choice == "8":
+            elif choice == "9":
                 # Reply to email
                 if not email_cache:
                     print("\nNo emails in cache - load emails first")
@@ -225,7 +251,7 @@ def interactive_mode():
                 except ValueError:
                     print("\nInvalid input - must be a number")
 
-            elif choice == "9":
+            elif choice == "10":
                 # Compose new email
                 to = input("Enter To recipients (comma separated): ").strip()
                 subject = input("Enter subject: ").strip()
@@ -238,7 +264,7 @@ def interactive_mode():
                 except Exception as e:
                     print(f"Error composing email: {str(e)}")
                     
-            elif choice == "10":
+            elif choice == "11":
                 # Batch send emails
                 if not email_cache:
                     print("\nNo emails in cache - load emails first")

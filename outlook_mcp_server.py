@@ -6,6 +6,7 @@ from backend.email_retrieval import (
     search_email_by_subject,
     search_email_by_from,
     search_email_by_to,
+    search_email_by_body,
     view_email_cache,
     get_email_by_number,
     list_recent_emails
@@ -183,6 +184,56 @@ def search_email_by_recipient_name_tool(
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
     emails, note = search_email_by_to(search_term, days, folder_name, match_all=match_all)
+    result = f"Found {len(emails)} matching emails{note}"
+    if emails:
+        preview = view_email_cache(1)
+        return {
+            "type": "text",
+            "text": f"{result}\n\n{preview}"
+        }
+    else:
+        return {
+            "type": "text",
+            "text": result
+        }
+
+@mcp.tool
+def search_email_by_body_tool(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> dict:
+    """Search emails by body content return count and page 1 preview (5 emails).
+    
+    This function searches the email body content. It does not search in the subject,
+    sender name, recipients, or other fields.
+    
+    Note: Searching email body is slower than searching other fields as it requires
+    loading the full content of each email.
+    
+    Args:
+        search_term: Plain text search term (colons are allowed as part of regular text)
+                    For exact phrase matching, enclose the term in quotes (e.g., "red hat partner day")
+                    For word-based matching, use the term without quotes (e.g., red hat partner day)
+        days: Number of days to look back (default: 7, max: 30)
+        folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True, requires ALL search terms to match (AND logic, default).
+                  If False, matches ANY search term (OR logic)
+
+    Returns:
+        dict: Response containing email count and previews
+        {
+            "type": "text",
+            "text": "Count: X\n\nPreview: Y"
+        }
+
+    """
+    if not search_term or not isinstance(search_term, str):
+        raise ValueError("Search term must be a non-empty string")
+    if not isinstance(days, int):
+        raise ValueError("Days parameter must be an integer")
+    emails, note = search_email_by_body(search_term, days, folder_name, match_all=match_all)
     result = f"Found {len(emails)} matching emails{note}"
     if emails:
         preview = view_email_cache(1)

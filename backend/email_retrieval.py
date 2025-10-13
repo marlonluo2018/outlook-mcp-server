@@ -132,6 +132,57 @@ def get_emails_from_folder(
                     raise RuntimeError(f"Failed after {retry_count} retries: {str(e)}")
 
 
+def _are_terms_close(text: str, terms: List[str], max_distance: int = 50) -> bool:
+    """
+    Check if all terms appear close to each other in the text.
+    
+    Args:
+        text: The text to search in
+        terms: List of terms to search for
+        max_distance: Maximum distance between terms (in characters)
+        
+    Returns:
+        True if all terms appear close to each other, False otherwise
+    """
+    if len(terms) <= 1:
+        return True
+    
+    # Find all positions of each term in the text
+    term_positions = {}
+    for term in terms:
+        positions = []
+        start = 0
+        while True:
+            pos = text.find(term, start)
+            if pos == -1:
+                break
+            positions.append(pos)
+            start = pos + 1
+        term_positions[term] = positions
+    
+    # Check if there's a combination of positions where all terms are close
+    # We'll use a simple approach: check if any term's position is close to any other term's position
+    for i, term1 in enumerate(terms):
+        for term2 in terms[i+1:]:
+            positions1 = term_positions.get(term1, [])
+            positions2 = term_positions.get(term2, [])
+            
+            # Check if any position of term1 is close to any position of term2
+            found_close = False
+            for pos1 in positions1:
+                for pos2 in positions2:
+                    if abs(pos1 - pos2) <= max_distance:
+                        found_close = True
+                        break
+                if found_close:
+                    break
+            
+            if not found_close:
+                return False
+    
+    return True
+
+
 def _process_email_item(item) -> Optional[Dict]:
     """Process a single email item and update cache"""
     try:
@@ -471,5 +522,138 @@ def search_email_by_to(
                     break  # Found match, no need to check other recipients
         
         return filtered_emails, note
+    
+    return emails, note
+
+def search_email_by_body(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> tuple[List[Dict], str]:
+    """Search emails by body content and return list of emails with note
+    
+    Args:
+        search_term: Search term to match in email body
+        days: Number of days to look back (default: 7)
+        folder_name: Optional folder name to search (default: Inbox)
+        match_all: If True (default), all terms must match (AND logic)
+                  If False, any term can match (OR logic)
+    
+    Returns:
+        Tuple of (email list, note string)
+    """
+    # Get all emails from the specified folder and time period (without subject filtering)
+    emails, note = get_emails_from_folder(
+        search_term=None,  # Don't filter by subject
+        days=days,
+        folder_name=folder_name
+    )
+    
+    # Filter by body content
+    if search_term:
+        # Check if search term is enclosed in quotes (exact phrase search)
+        is_exact_phrase = (search_term.startswith('"') and search_term.endswith('"')) or \
+                          (search_term.startswith("'") and search_term.endswith("'"))
+        
+        if is_exact_phrase:
+            # Remove quotes and search for exact phrase
+            search_phrase = search_term[1:-1].lower()
+            filtered_emails = []
+            
+            with OutlookSessionManager() as session:
+                pythoncom.CoInitialize()
+                try:
+                    for email in emails:
+                        try:
+                            # Get the full email item to access the body
+                            item = session.namespace.GetItemFromID(email['id'])
+                            if item.Class != 43:  # Skip non-mail items
+                                continue
+                                
+                            body_text = getattr(item, 'Body', '').lower()
+                            
+                            # Check if the exact phrase is found in the body
+                            if search_phrase in body_text:
+                                filtered_emails.append(email)
+                        except Exception as e:
+                            # Skip problematic emails
+                            continue
+                finally:
+                    pythoncom.CoUninitialize()
+        else:
+            # Original logic for word-based search
+            search_terms = search_term.lower().split()
+            filtered_emails = []
+            
+            with OutlookSessionManager() as session:
+                pythoncom.CoInitialize()
+                try:
+                    for email in emails:
+                        try:
+                            # Get the full email item to access the body
+                            item = session.namespace.GetItemFromID(email['id'])
+                            if item.Class != 43:  # Skip non-mail items
+                                continue
+                                
+                            body_text = getattr(item, 'Body', '').lower()
+                            
+                            # Check if all terms match (AND logic) or any term matches (OR logic)
+                            if match_all:
+                                # All terms must be found in the body
+                                if all(term in body_text for term in search_terms):
+                                    # Additional check: ensure terms appear close to each other
+                                    # This helps filter out emails where terms are scattered throughout
+                                    if _are_terms_close(body_text, search_terms):
+                                        filtered_emails.append(email)
+                            else:
+                                # Any term can be found in the body
+                                if any(term in body_text for term in search_terms):
+                                    filtered_emails.append(email)
+                        except Exception as e:
+                            # Skip problematic emails
+                            continue
+                finally:
+                    pythoncom.CoUninitialize()
+        
+        # Update the email cache with only the filtered emails
+        email_cache.clear()
+        for email in filtered_emails:
+            # Get full email details including body for the cache
+            try:
+                with OutlookSessionManager() as session:
+                    pythoncom.CoInitialize()
+                    try:
+                        item = session.namespace.GetItemFromID(email['id'])
+                        if item.Class == 43:  # Only process mail items
+                            full_email = _process_email_item(item)
+                            if full_email:
+                                email_cache[email['id']] = full_email
+                    finally:
+                        pythoncom.CoUninitialize()
+            except Exception:
+                # If we can't get full details, use the basic email data
+                email_cache[email['id']] = email
+        
+        return filtered_emails, note
+    
+    # If no search term provided, return all emails and update cache
+    email_cache.clear()
+    for email in emails:
+        # Get full email details including body for the cache
+        try:
+            with OutlookSessionManager() as session:
+                pythoncom.CoInitialize()
+                try:
+                    item = session.namespace.GetItemFromID(email['id'])
+                    if item.Class == 43:  # Only process mail items
+                        full_email = _process_email_item(item)
+                        if full_email:
+                            email_cache[email['id']] = full_email
+                finally:
+                    pythoncom.CoUninitialize()
+        except Exception:
+            # If we can't get full details, use the basic email data
+            email_cache[email['id']] = email
     
     return emails, note

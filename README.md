@@ -12,6 +12,7 @@ The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook,
 ### Key Capabilities
 
 - **Email Operations**: Search, retrieve, compose, and reply to emails
+- **Advanced Search**: Intelligent word proximity search for more accurate results
 - **Folder Management**: Browse and access all Outlook folders
 - **Batch Processing**: Send bulk emails with CSV-based recipient lists (CLI only)
 - **Caching System**: Intelligent email caching for performance optimization
@@ -116,7 +117,8 @@ Ask your AI assistant to:
 - "Search for email subjects about project updates"  
 - "Find emails from the last 2 weeks"  
 - "Search for emails from John Doe"  
-- "Search for emails sent to Team Name"
+- "Search for emails sent to Team Name"  
+- "Search for emails with specific content in the body"
 
 This loads your emails into a temporary cache.
 
@@ -167,56 +169,136 @@ Start by choosing one of these options:
 - **Menu Option 3**: Search email subjects (enter search terms and filters)  
 - **Menu Option 4**: Search emails by sender name (enter sender name)  
 - **Menu Option 5**: Search emails by recipient name (enter recipient name)  
+- **Menu Option 6**: Search emails by body content (enter search terms)  
 
 This clears any previous cache and loads your selected emails.
 
 **Step 2: Browse Available Emails**  
-Use **Menu Option 6** to:  
+Use **Menu Option 7** to:  
 - View all emails currently in your cache  
 - See a numbered list with subjects and senders  
 - Navigate through multiple pages if needed  
 - Note the email number you want to work with
 
 **Step 3: View Email Details**  
-Use **Menu Option 7** to:  
+Use **Menu Option 8** to:  
 - Enter the email number you want to read  
 - See the complete email content  
 - Check attachments and recipient details  
 
 **Step 4: Take Action on Email**  
 Choose your action:  
-- **Menu Option 8**: Reply to the email (enter email number)  
-- **Menu Option 9**: Compose a new email  
-- **Menu Option 10**: Send batch emails (using cached email as template)  
+- **Menu Option 9**: Reply to the email (enter email number)  
+- **Menu Option 10**: Compose a new email  
+- **Menu Option 11**: Send batch emails (using cached email as template)  
 
 **📋 Common Usage Patterns**:
 
-**To reply to an email**: 2 → 6 → 7 → 8  
+**To reply to an email**: 2 → 7 → 8 → 9  
 (List emails → View cache → Read email → Reply)
 
-**To search and respond**: 3 → 6 → 7 → 8  
+**To search and respond**: 3 → 7 → 8 → 9  
 (Search email subjects → View cache → Read email → Reply)
 
-**To search by sender name and respond**: 4 → 6 → 7 → 8  
+**To search by sender name and respond**: 4 → 7 → 8 → 9  
 (Search by sender name → View cache → Read email → Reply)
 
-**To search by recipient name and respond**: 5 → 6 → 7 → 8  
+**To search by recipient name and respond**: 5 → 7 → 8 → 9  
 (Search by recipient name → View cache → Read email → Reply)
 
-**To send batch emails**: 2 → 6 → 10  
+**To search by body content and respond**: 6 → 7 → 8 → 9  
+(Search by body content → View cache → Read email → Reply)
+
+**To send batch emails**: 2 → 7 → 11  
 (List emails → View cache → Send batch)
 
 **⚠️ Important Notes**:
 
-- **Cache Management**: Each time you use Option 2, 3, 4, or 5, the cache is cleared and reloaded
-- **Email Numbers**: Always use the numbers shown in the current cache (Option 6)
+- **Cache Management**: Each time you use Option 2, 3, 4, 5, or 6, the cache is cleared and reloaded
+- **Email Numbers**: Always use the numbers shown in the current cache (Option 7)
 - **Your Confirmation**: The system asks for confirmation before sending any emails
 - **Session-Based**: Cache persists until you exit or load new emails
 - **Menu Navigation**: Use Option 0 to exit safely
 
 **Best for**: Users who prefer direct, menu-driven control over email operations or need batch email capabilities.
 
-### Available Tools
+## 🔍 Advanced Search Features
+
+### Search Types
+
+The Outlook MCP Server supports two types of search:
+
+#### 1. Word-Based Search (Default)
+When you enter a search term without quotes, the system splits it into individual words and searches for emails containing those words.
+
+**Example**: `red hat partner day` searches for emails containing "red", "hat", "partner", and "day"
+
+#### 2. Exact Phrase Search (With Quotes)
+When you enclose your search term in quotes, the system searches for the exact phrase.
+
+**Example**: `"red hat partner day"` searches for emails containing the exact phrase "red hat partner day"
+
+### Search Logic Control
+
+The `match_all` parameter controls how word-based searches work:
+
+- **match_all=true (Default)**: Returns emails containing ALL search words, with intelligent proximity checking
+- **match_all=false**: Returns emails containing ANY of the search words
+
+### Proximity Search
+
+For word-based searches with `match_all=true`, the system now includes intelligent proximity checking:
+- Search words must appear close to each other in the email content (default: within 50 characters)
+- This prevents returning emails that contain all words but in unrelated contexts
+- Example: Searching for "red hat partner day" won't return emails about "Redhat Incentive" programs
+
+### Search Examples
+
+#### Word-Based Search (Recommended for General Use)
+```json
+{
+  "tool": "search_email_by_body_tool",
+  "parameters": {
+    "search_term": "project deadline",
+    "match_all": true
+  }
+}
+// Returns emails containing both "project" and "deadline" close to each other
+```
+
+#### Exact Phrase Search (For Specific Terms)
+```json
+{
+  "tool": "search_email_by_body_tool",
+  "parameters": {
+    "search_term": "\"project deadline\"",
+    "match_all": true
+  }
+}
+// Returns emails containing the exact phrase "project deadline"
+```
+
+#### Broad Search (Any Word)
+```json
+{
+  "tool": "search_email_by_body_tool",
+  "parameters": {
+    "search_term": "project deadline",
+    "match_all": false
+  }
+}
+// Returns emails containing either "project" or "deadline"
+```
+
+### Search Result Comparison
+
+| Search Type | Example | Results | Precision |
+|-------------|---------|---------|-----------|
+| Word-based (match_all=true) | "red hat partner day" | 13 emails | High |
+| Word-based (match_all=false) | "red hat partner day" | 278 emails | Low |
+| Exact phrase | "\"red hat partner day\"" | 10 emails | Highest |
+
+## 📚 Available Tools
 
 #### 1. List Folders
 
@@ -283,7 +365,21 @@ Choose your action:
 }
 ```
 
-#### 6. View Email Cache
+#### 6. Search Email by Body Content
+
+```json
+{
+  "tool": "search_email_by_body_tool",
+  "parameters": {
+    "search_term": "project deadline",
+    "days": 14,
+    "folder_name": "Inbox",
+    "match_all": true
+  }
+}
+```
+
+#### 7. View Email Cache
 
 ```json
 {
@@ -294,7 +390,7 @@ Choose your action:
 }
 ```
 
-#### 7. Get Email Details
+#### 8. Get Email Details
 
 ```json
 {
@@ -306,7 +402,7 @@ Choose your action:
 // Returns full email with body and attachments
 ```
 
-#### 8. Reply to Email
+#### 9. Reply to Email
 
 ```json
 {
@@ -321,7 +417,7 @@ Choose your action:
 // ⚠️ Requires explicit user confirmation
 ```
 
-#### 9. Compose New Email
+#### 10. Compose New Email
 
 ```json
 {
@@ -336,7 +432,7 @@ Choose your action:
 // ⚠️ Requires explicit user confirmation
 ```
 
-#### 10. Batch Email Operations (Interactive Only)
+#### 11. Batch Email Operations (Interactive Only)
 
 **Workflow**:
 
@@ -434,7 +530,13 @@ Error: No emails in cache or Invalid cache item
 
 ## 📋 Changelog
 
-### v1.1.0 (Current)
+### v1.2.0 (Current)
+- **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results
+- **Improved Search Precision**: Word-based searches now check if search terms appear close to each other
+- **Better Search Documentation**: Comprehensive guide on different search types and parameters
+- **Default match_all=true**: All searches now default to requiring all terms to match
+
+### v1.1.0
 - **Enhanced Email Details**: Improved email data structure with recipient information
 - **Better Body Formatting**: Enhanced email body formatting for replies and batch operations
 - **MCP Response Refactoring**: Simplified response structure by removing unnecessary wrappers
@@ -480,4 +582,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 - **Issues**: [GitHub Issues](https://github.com/marlonluo2018/outlook-mcp-server/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/marlonluo2018/outlook-mcp-server/discussions)
-- **Documentation**: This README and inline code documentation
+- **Documentation**: This README and [UPDATED_SEARCH_GUIDE.md](UPDATED_SEARCH_GUIDE.md)
