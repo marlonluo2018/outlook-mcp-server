@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 import pythoncom
 from typing import List, Dict, Optional
@@ -31,6 +31,8 @@ def get_emails_from_folder(
     limit_note = ""
     
     with OutlookSessionManager() as session:
+      
+        
         while retry_count < 3:  # MAX_RETRIES from shared.py
             try:
                 # Check timeout
@@ -40,25 +42,84 @@ def get_emails_from_folder(
                     
                 folder = session.get_folder(folder_name)
                 if not folder:
+
                     return [], " (Folder not found)"
+                
+
                     
                 folder_items = folder.Items
-                folder_items.Sort("[ReceivedTime]", True)  # Newest first
-                
-                # Get date threshold
+
+                # Get date threshold first to use in Restrict filter
                 days_to_use = min(days or MAX_DAYS, MAX_DAYS)
-                threshold_date = datetime.now().astimezone() - timedelta(days=days_to_use)
+                now = datetime.now()
+                # Make threshold_date timezone-aware to match received_datetime
+                threshold_date = now.replace(tzinfo=timezone.utc) - timedelta(days=days_to_use)
+                
+                # Parse search terms for filtering
+                search_terms = search_term.lower().split() if search_term else None
+                
+                # Use Outlook's built-in search functionality if search term is provided
+                if search_term:
+                    # Create a more sophisticated search filter that searches multiple fields
+                    # Using Outlook's DASL syntax for better search capabilities
+                    filter_parts = []
+                    
+                    # For each search term, create filters for different fields
+                    for term in search_terms:
+                        # Add subject filter
+                        subject_filter = f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
+                        filter_parts.append(subject_filter)
+                        
+                        # Add sender filter
+                        sender_filter = f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
+                        filter_parts.append(sender_filter)
+                        
+                        # Add body filter (can be slow for large mailboxes)
+                        body_filter = f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
+                        filter_parts.append(body_filter)
+                    
+                    # Combine filters based on match_all parameter
+                    if match_all and len(search_terms) > 1:
+                        # For AND logic, group by term first, then combine with AND
+                        term_groups = []
+                        for term in search_terms:
+                            term_filters = [
+                                f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'",
+                                f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'",
+                                f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
+                            ]
+                            term_groups.append(f"({' OR '.join(term_filters)})")
+                        
+                        filter_str = f"@SQL={' AND '.join(term_groups)}"
+                    else:
+                        # For OR logic (default), combine all filters with OR
+                        filter_str = f"@SQL=({' OR '.join(filter_parts)})"
+                    
+                    # Add date filter to improve performance
+                    date_filter = f"\"urn:schemas:httpmail:datereceived\" >= '{threshold_date.strftime('%Y-%m-%d %H:%M:%S')}'"
+                    filter_str = f"@SQL=({filter_str[5:]}) AND {date_filter}"  # Remove @SQL= and add it back with date filter
+                    
+                    folder_items = folder_items.Restrict(filter_str)
+
+                
+                # Sort by received time (newest first)
+                folder_items.Sort("[ReceivedTime]", True)
+
+                
+                # Try to access the first item directly
+                if folder_items.Count > 0:
+                    try:
+                        first_item = folder_items.Item(1)
+                        if hasattr(first_item, 'Subject'):
+                            pass  # Subject exists
+                    except Exception:
+                        pass  # Skip problematic first item
                 
                     
                 # Process emails from newest to oldest
                 emails = []
                 processed_count = 0
                 total_items = folder_items.Count
-                if search_term:
-                    print(f"Searching for emails containing: '{search_term}'...")
-                else:
-                    print(f"Loading emails from the last {days_to_use} days...")
-                pythoncom.CoInitialize()
                 try:
                     for i in range(1, min(total_items + 1, MAX_EMAILS + 1)):
                         current_time = time.time()
@@ -79,18 +140,32 @@ def get_emails_from_folder(
                             processed_count += 1
                             received_time = item.ReceivedTime
                             
+                            # Convert COM datetime to Python datetime for comparison
+                            # COM dates start from 1899-12-30, Python from 1970-01-01
+                            # We need to handle this conversion properly
+                            try:
+                                # Try to convert COM datetime to Python datetime
+                                if hasattr(received_time, 'year'):
+                                    # It's already a Python datetime
+                                    received_datetime = received_time
+                                else:
+                                    # It's a COM date, convert it
+                                    received_datetime = datetime.strptime(received_time.strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+                            except:
+                                # If conversion fails, skip this email
+                                continue
+                            
+                            try:
+                                date_comparison = received_datetime >= threshold_date
+                            except Exception as e:
+                                continue
+                            
                             # Stop if we've gone past the date threshold
-                            if received_time < threshold_date:
+                            if received_datetime < threshold_date:
                                 break
                                 
                             # Only process if within date range
-                            if received_time >= threshold_date:
-                                # Simple progress indicator for large folders
-                                if processed_count % 50 == 0:
-                                    if search_term:
-                                        print(f"Found {len(emails)} matching emails so far...")
-                                    else:
-                                        print(f"Loaded {processed_count} emails...")
+                            if received_datetime >= threshold_date:
                                 # Extract just the display name from SenderName (before first '/')
                                 sender_name = getattr(item, 'SenderName', 'Unknown Sender').split('/')[0].strip()
                                 
@@ -100,28 +175,21 @@ def get_emails_from_folder(
                                     'subject': getattr(item, 'Subject', 'No Subject'),
                                     'sender': sender_name,
                                     'sender_email': getattr(item, 'SenderEmailAddress', ''),
-                                    'received_time': str(received_time),
+                                    'received_time': str(received_datetime),
                                     'unread': getattr(item, 'UnRead', False),
                                     'to_recipients': [{'name': getattr(item, 'To', '')}],
                                     'cc_recipients': [{'name': getattr(item, 'CC', '')}]
                                 }
                                 
-                                # Apply search filtering if search term provided
-                                if search_term:
-                                    search_lower = search_term.lower()
-                                    subject_lower = email_data['subject'].lower()
-                                    if search_lower in subject_lower:
-                                        emails.append(email_data)
-                                        email_cache[email_data['id']] = email_data
-                                else:
-                                    emails.append(email_data)
-                                    email_cache[email_data['id']] = email_data
+                                # Add to results (filtering already done by Restrict)
+                                emails.append(email_data)
+                                email_cache[email_data['id']] = email_data
                                 
                                 
                         except Exception as e:
                             continue  # Skip problematic emails
                 finally:
-                    pythoncom.CoUninitialize()
+                    pass
                     
                 
                 return emails[:MAX_EMAILS], limit_note
