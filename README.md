@@ -234,7 +234,7 @@ The Outlook MCP Server provides five distinct email search functions, each optim
 | **From Search** | `search_email_by_sender_name_tool` | Sender display names | Find emails from specific people |
 | **To Search** | `search_email_by_recipient_name_tool` | Recipient display names (TO/CC) | Find emails to specific recipients |
 | **Body Search** | `search_email_by_body_tool` | Full email body content | Find emails by content details |
-| **General Search** | `search_emails_tool` | Subject, sender, body | Broad keyword searches |
+| **General Search** | `search_emails_tool` *(CLI only)* | Subject, sender, body | Broad keyword searches *(CLI users)* |
 
 ### Search Logic System
 

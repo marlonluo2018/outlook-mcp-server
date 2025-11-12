@@ -61,7 +61,7 @@ This is a Model Context Protocol (MCP) server that provides programmatic access 
 
 **Email Cache Workflow**:
 - All operations work with in-memory email cache
-- Cache is populated via `list_recent_emails_tool` or `search_emails_tool`
+- Cache is populated via `list_recent_emails_tool` or `search_emails` function (CLI only)
 - Email operations reference cache entries by position number
 - Cache automatically refreshes on new list/search operations
 
@@ -86,7 +86,7 @@ Key constants defined in `backend/shared.py`:
 ### Tool Call Patterns
 
 MCP tools follow a specific sequence:
-1. **Cache Population**: Call `list_recent_emails_tool` or `search_emails_tool`
+1. **Cache Population**: Call `list_recent_emails_tool` or `search_emails` function (CLI only)
 2. **Cache Browsing**: Use `view_email_cache_tool` to identify target email
 3. **Content Retrieval**: Use `get_email_by_number_tool` for full email details
 4. **Email Operations**: Use composition tools (requires user confirmation)
