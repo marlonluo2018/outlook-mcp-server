@@ -222,81 +222,151 @@ Choose your action:
 
 **Best for**: Users who prefer direct, menu-driven control over email operations or need batch email capabilities.
 
-## 🔍 Advanced Search Features
+## 🔍 Email Search System
 
-### Search Types
+### Search Types Overview
 
-The Outlook MCP Server supports two types of search:
+The Outlook MCP Server provides five distinct email search functions, each optimized for different use cases:
+
+| Search Type | Function | Searches | Use Case |
+|-------------|----------|----------|----------|
+| **Subject Search** | `search_email_by_subject_tool` | Subject line, sender names, body content | Find emails by topic or keywords |
+| **From Search** | `search_email_by_sender_name_tool` | Sender display names | Find emails from specific people |
+| **To Search** | `search_email_by_recipient_name_tool` | Recipient display names (TO/CC) | Find emails to specific recipients |
+| **Body Search** | `search_email_by_body_tool` | Full email body content | Find emails by content details |
+| **General Search** | `search_emails_tool` | Subject, sender, body | Broad keyword searches |
+
+### Search Logic System
+
+#### Core Match Logic Parameter
+
+All search functions use the `match_all` parameter to control matching behavior:
+
+- **`match_all=true` (Default)**: **AND Logic** - All search terms must match
+- **`match_all=false`**: **OR Logic** - Any search term can match
+
+#### Search Term Processing
+
+1. **Term Splitting**: Queries split by whitespace into individual terms
+2. **Case Insensitive**: All matching performed in lowercase
+3. **Multi-term Support**: Multiple search terms processed efficiently
+
+### Field-Specific Search Behavior
+
+#### 1. Subject Search (`search_email_by_subject_tool`)
+- **Search Method**: Uses Outlook's built-in DASL syntax for optimal performance
+- **Search Fields**: 
+  - Subject line (`urn:schemas:httpmail:subject`)
+  - Sender name (`urn:schemas:httpmail:fromname`) 
+  - Body content (`urn:schemas:httpmail:textdescription`)
+- **Logic Implementation**:
+  - AND: Groups filters by term, combines with AND
+  - OR: Combines all field filters with OR
+
+#### 2. From Search (`search_email_by_sender_name_tool`)
+- **Search Method**: Post-retrieval filtering
+- **Search Fields**: Sender display names only
+- **Important**: Searches display names (e.g., "John Smith"), NOT email addresses (e.g., "john.smith@company.com")
+- **Matching**: Simple case-insensitive substring search
+
+#### 3. To Search (`search_email_by_recipient_name_tool`)
+- **Search Method**: Post-retrieval filtering
+- **Search Fields**: Recipient display names in TO and CC fields
+- **Important**: Searches display names only, NOT email addresses
+- **Optimization**: Stops checking additional recipients once match found
+
+#### 4. Body Search (`search_email_by_body_tool`)
+- **Search Method**: Full email retrieval with advanced text analysis
+- **Advanced Features**:
+  - **Exact Phrase Search**: Supports quoted terms (`"exact phrase"`)
+  - **Proximity Checking**: Ensures terms appear within 50 characters of each other
+  - **Full Content Access**: Retrieves complete email body for accurate searching
+  - **AND/OR Logic**: Same `match_all` parameter control
+
+### Advanced Search Features
 
 #### 1. Word-Based Search (Default)
-When you enter a search term without quotes, the system splits it into individual words and searches for emails containing those words.
-
-**Example**: `red hat partner day` searches for emails containing "red", "hat", "partner", and "day"
+```json
+{
+  "tool": "search_email_by_body_tool",
+  "parameters": {
+    "search_term": "project deadline meeting",
+    "match_all": true
+  }
+}
+// Searches for emails containing "project", "deadline", AND "meeting" close to each other
+```
 
 #### 2. Exact Phrase Search (With Quotes)
-When you enclose your search term in quotes, the system searches for the exact phrase.
-
-**Example**: `"red hat partner day"` searches for emails containing the exact phrase "red hat partner day"
-
-### Search Logic Control
-
-The `match_all` parameter controls how word-based searches work:
-
-- **match_all=true (Default)**: Returns emails containing ALL search words, with intelligent proximity checking
-- **match_all=false**: Returns emails containing ANY of the search words
-
-### Proximity Search
-
-For word-based searches with `match_all=true`, the system now includes intelligent proximity checking:
-- Search words must appear close to each other in the email content (default: within 50 characters)
-- This prevents returning emails that contain all words but in unrelated contexts
-- Example: Searching for "red hat partner day" won't return emails about "Redhat Incentive" programs
-
-### Search Examples
-
-#### Word-Based Search (Recommended for General Use)
 ```json
 {
   "tool": "search_email_by_body_tool",
   "parameters": {
-    "search_term": "project deadline",
+    "search_term": "\"project deadline meeting\"",
     "match_all": true
   }
 }
-// Returns emails containing both "project" and "deadline" close to each other
+// Searches for emails containing the exact phrase "project deadline meeting"
 ```
 
-#### Exact Phrase Search (For Specific Terms)
+#### 3. Broad Search (Any Term)
 ```json
 {
-  "tool": "search_email_by_body_tool",
-  "parameters": {
-    "search_term": "\"project deadline\"",
-    "match_all": true
-  }
-}
-// Returns emails containing the exact phrase "project deadline"
-```
-
-#### Broad Search (Any Word)
-```json
-{
-  "tool": "search_email_by_body_tool",
+  "tool": "search_email_by_subject_tool",
   "parameters": {
     "search_term": "project deadline",
     "match_all": false
   }
 }
-// Returns emails containing either "project" or "deadline"
+// Returns emails containing either "project" OR "deadline"
 ```
+
+#### 4. Folder Hierarchy Support
+All search functions support nested folder paths:
+
+```json
+{
+  "tool": "search_email_by_subject_tool",
+  "parameters": {
+    "search_term": "meeting notes",
+    "folder_name": "Projects/Subfolder/Project A"
+  }
+}
+// Supports unlimited folder depth with "/" or "\\" separators
+```
+
+### Proximity Search Technology
+
+**Body Search Proximity Checking**:
+- **Distance**: Terms must appear within 50 characters of each other
+- **Purpose**: Prevents false positives where terms appear in unrelated contexts
+- **Example**: Searching "red hat partner day" won't return emails about "Redhat Incentive" programs
+- **Availability**: Only in body search with `match_all=true`
 
 ### Search Result Comparison
 
-| Search Type | Example | Results | Precision |
-|-------------|---------|---------|-----------|
-| Word-based (match_all=true) | "red hat partner day" | 13 emails | High |
-| Word-based (match_all=false) | "red hat partner day" | 278 emails | Low |
-| Exact phrase | "\"red hat partner day\"" | 10 emails | Highest |
+| Search Type | Example | Logic | Results | Use Case |
+|-------------|---------|-------|---------|----------|
+| Word-based (AND) | "red hat partner day" | All terms close | 13 emails | High precision |
+| Word-based (OR) | "red hat partner day" | Any term | 278 emails | Broad search |
+| Exact phrase | "\"red hat partner day\"" | Exact match | 10 emails | Specific terms |
+| From name | "John Doe" | Display name | 25 emails | Person-specific |
+| To name | "Team Name" | Recipient name | 15 emails | Team/group search |
+
+### Performance Considerations
+
+- **Subject Search**: Fastest (uses Outlook's built-in search)
+- **From/To Search**: Medium speed (retrieves all emails, then filters)
+- **Body Search**: Slowest (retrieves full email content for accuracy)
+- **Cache Management**: Each search clears previous cache automatically
+- **Timeouts**: Protected by configurable time limits (default: 58 seconds)
+
+### CLI vs MCP Consistency
+
+**Unified Behavior**: Both CLI and MCP interfaces use the same search logic:
+- **CLI Menu Options**: 3-6 correspond to the same search functions
+- **MCP Tools**: All accept the same `match_all` parameter
+- **Backend Functions**: Single implementation ensures consistency
 
 ## 📚 Available Tools
 
