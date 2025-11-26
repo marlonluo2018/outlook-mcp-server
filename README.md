@@ -31,9 +31,43 @@ Before installing and running the Outlook MCP Server, ensure you have the follow
    - For cloning the repository
    - Download from [git-scm.com](https://git-scm.com/downloads)
 
+3. **Build Tools (Optional)**
+    - Required for most installation methods (except UVX with local source)
+    - Install with: `pip install build twine`
+    - Used for: Creating distribution files from source code
+    - Note: Pre-built distribution files are already included in the `dist/` folder
+    
+    Installation options:
+    1. UVX with local source - No build required
+    2. Editable Installation (`pip install -e .`) - Build required
+    3. Standard Installation (`pip install .`) - Build required
+    4. Direct Python file execution - No build required (but dependencies needed)
+
+### Building the Package
+
+To install the package using methods 2 or 3, you need to build it first:
+
+```bash
+# Navigate to the project directory
+cd outlook-mcp-server
+
+# Build the package
+python -m build
+```
+
+This will create distribution files in the `dist/` directory:
+- `outlook_mcp_server-X.X.X-py3-none-any.whl` (wheel file)
+- `outlook_mcp_server-X.X.X.tar.gz` (source distribution)
+
+Note: Pre-built distribution files are already included in the `dist/` folder, so you can use those directly with `pip install dist/outlook_mcp_server-0.1.0-py3-none-any.whl`.
+
 ## ⚡ Quick Start
 
+Choose one of the following installation options:
+
 ### Option 1: Using UVX with Local Package (Recommended)
+
+No build required. Run directly from source:
 
 ```bash
 # Clone the repository
@@ -46,6 +80,8 @@ uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outl
 
 ### Option 2: Editable Installation
 
+Build required. Install in editable mode for development:
+
 ```bash
 # Clone the repository
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git
@@ -57,9 +93,14 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in editable mode
 pip install -e .
+
+# Run the server
+python -m outlook_mcp_server
 ```
 
 ### Option 3: Standard Installation
+
+Build required. Install the package:
 
 ```bash
 # Clone the repository
@@ -72,6 +113,25 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install the package
 pip install .
+
+# Run the server
+python -m outlook_mcp_server
+```
+
+### Option 4: Direct Python File Execution
+
+No build required, but dependencies needed:
+
+```bash
+# Clone the repository
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
+python outlook_mcp_server/__main__.py
 ```
 
 ## Running the Server
@@ -113,36 +173,9 @@ python -m outlook_mcp_server.cli_interface
 outlook-mcp-server
 ```
 
-# Quick Start
+## MCP Configuration
 
-## Option 1: Using UVX with Local Package (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/marlonluo2018/outlook-mcp-server.git
-cd outlook-mcp-server
-
-# Run directly with UVX (no installation needed)
-uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outlook-mcp-server
-```
-
-## Option 2: Traditional Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/marlonluo2018/outlook-mcp-server.git
-cd outlook-mcp-server
-
-# Install the package
-pip install -e .
-
-# Run the server
-python -m outlook_mcp_server
-```
-
-### MCP Configuration
-
-#### Option 1: UVX Configuration with Local Package (Recommended)
+### Option 1: UVX Configuration with Local Package (Recommended)
 
 For using the local package with UVX, use this configuration in your MCP client (e.g., Claude Desktop settings.json):
 
@@ -161,7 +194,7 @@ For using the local package with UVX, use this configuration in your MCP client 
 }
 ```
 
-#### Option 2: Direct Python Command Configuration
+### Option 2: Direct Python Command Configuration
 
 For MCP clients that support direct Python commands or if you prefer to use your existing Python installation:
 
@@ -183,7 +216,7 @@ pip install -r requirements.txt
 
 This configuration file is provided as `mcp-config-python.json` in the project root for convenience.
 
-#### Option 3: UVX Configuration (for published package)
+### Option 3: UVX Configuration (for published package)
 
 Once the package is published to PyPI, you can use UVX:
 
@@ -201,7 +234,7 @@ Once the package is published to PyPI, you can use UVX:
 }
 ```
 
-#### Option 3: Direct Python File Execution
+### Option 4: Direct Python File Execution
 
 For MCP clients that support direct Python file execution or if you prefer to run the Python file directly:
 
@@ -222,24 +255,6 @@ pip install -r requirements.txt
 ```
 
 This configuration file is provided as `mcp-config-python.json` in the project root for convenience.
-
-#### Option 4: UVX Configuration (for published package)
-
-Once the package is published to PyPI, you can use UVX:
-
-```json
-{
-  "mcpServers": {
-    "outlook-mcp-server": {
-      "command": "uvx",
-      "args": [
-        "--with", "pywin32>=226",
-        "outlook-mcp-server"
-      ]
-    }
-  }
-}
-```
 
 ### Human Interface: CLI
 
