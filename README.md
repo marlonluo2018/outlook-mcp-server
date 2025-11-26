@@ -126,21 +126,7 @@ cd outlook-mcp-server
 uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outlook-mcp-server
 ```
 
-## Option 2: Direct Python Execution (No Installation)
-
-```bash
-# Clone the repository
-git clone https://github.com/marlonluo2018/outlook-mcp-server.git
-cd outlook-mcp-server
-
-# Install dependencies only
-pip install -r requirements.txt
-
-# Run directly with Python (no installation needed)
-python outlook_mcp_server/__main__.py
-```
-
-## Option 3: Traditional Installation
+## Option 2: Traditional Installation
 
 ```bash
 # Clone the repository
@@ -190,21 +176,7 @@ For MCP clients that support direct Python commands or if you prefer to use your
 }
 ```
 
-**Option C: Direct Python File Execution**
-Use the configuration in your `mcp-config-python-file.json`:
-
-```json
-{
-  "mcpServers": {
-    "outlook-mcp-server": {
-      "command": "python",
-      "args": ["outlook_mcp_server/__main__.py"]
-    }
-  }
-}
-```
-
-Note: With Option B and C, you'll need to install the dependencies first:
+Note: With this approach, you'll need to install the dependencies first:
 ```bash
 pip install -r requirements.txt
 ```
@@ -283,7 +255,7 @@ The CLI interface is designed exclusively for human users, not LLMs:
 
 ```bash
 # Start interactive session (human only)
-python outlook_mcp_server/cli_interface.py
+python -m outlook_mcp_server.cli_interface
 ```
 
 Note: For LLM integration, use the MCP server interface instead.
@@ -550,7 +522,7 @@ Ask your AI assistant to:
 **Getting Started**:
 ```bash
 # Start the interactive email session
-python cli_interface.py
+python -m outlook_mcp_server.cli_interface
 ```
 
 **🔄 Step-by-Step Workflow**:
