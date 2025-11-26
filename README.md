@@ -2,7 +2,36 @@
 
 A powerful MCP (Model Context Protocol) server that provides seamless integration with Microsoft Outlook through COM interface. This server enables AI assistants to interact with your Outlook emails, including searching, reading, composing, and sending emails.
 
-## � Quick Start
+## Prerequisites
+
+Before installing and running the Outlook MCP Server, ensure you have the following:
+
+### Required Software
+
+1. **Python 3.8 or higher**
+   - Download from [python.org](https://www.python.org/downloads/)
+   - Make sure to add Python to your PATH during installation
+
+2. **Microsoft Outlook**
+   - Outlook 2016 or later (including Outlook 365)
+   - Must be installed on the same machine where you'll run the server
+
+3. **Windows Operating System**
+   - Windows 10 or later
+   - Required for COM interface access to Outlook
+
+### Optional Tools
+
+1. **UVX (Recommended)**
+   - A modern Python package runner that creates isolated environments
+   - Install with: `pip install uvx`
+   - Benefits: Automatic dependency management, clean environments, no system pollution
+
+2. **Git**
+   - For cloning the repository
+   - Download from [git-scm.com](https://git-scm.com/downloads)
+
+## ⚡ Quick Start
 
 ### Option 1: Using UVX with Local Package (Recommended)
 
@@ -97,7 +126,21 @@ cd outlook-mcp-server
 uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outlook-mcp-server
 ```
 
-## Option 2: Traditional Installation
+## Option 2: Direct Python Execution (No Installation)
+
+```bash
+# Clone the repository
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Install dependencies only
+pip install -r requirements.txt
+
+# Run directly with Python (no installation needed)
+python outlook_mcp_server/__main__.py
+```
+
+## Option 3: Traditional Installation
 
 ```bash
 # Clone the repository
@@ -147,7 +190,21 @@ For MCP clients that support direct Python commands or if you prefer to use your
 }
 ```
 
-Note: With this approach, you'll need to install the dependencies first:
+**Option C: Direct Python File Execution**
+Use the configuration in your `mcp-config-python-file.json`:
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "python",
+      "args": ["outlook_mcp_server/__main__.py"]
+    }
+  }
+}
+```
+
+Note: With Option B and C, you'll need to install the dependencies first:
 ```bash
 pip install -r requirements.txt
 ```
@@ -155,6 +212,46 @@ pip install -r requirements.txt
 This configuration file is provided as `mcp-config-python.json` in the project root for convenience.
 
 #### Option 3: UVX Configuration (for published package)
+
+Once the package is published to PyPI, you can use UVX:
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--with", "pywin32>=226",
+        "outlook-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+#### Option 3: Direct Python File Execution
+
+For MCP clients that support direct Python file execution or if you prefer to run the Python file directly:
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "python",
+      "args": ["outlook_mcp_server/__main__.py"]
+    }
+  }
+}
+```
+
+Note: With this approach, you'll need to install the dependencies first:
+```bash
+pip install -r requirements.txt
+```
+
+This configuration file is provided as `mcp-config-python.json` in the project root for convenience.
+
+#### Option 4: UVX Configuration (for published package)
 
 Once the package is published to PyPI, you can use UVX:
 
@@ -186,7 +283,7 @@ The CLI interface is designed exclusively for human users, not LLMs:
 
 ```bash
 # Start interactive session (human only)
-python -m outlook_mcp_server.cli_interface
+python outlook_mcp_server/cli_interface.py
 ```
 
 Note: For LLM integration, use the MCP server interface instead.
@@ -204,6 +301,56 @@ pip install -e ".[dev]"
 - Changes to source code immediately affect the installed package
 - No need to reinstall after making changes
 - Ideal for testing and development
+
+**Development Tools:**
+- **Virtual Environment**: Always use a virtual environment for development
+  ```bash
+  python -m venv venv
+  source venv/bin/activate  # On Windows: venv\Scripts\activate
+  ```
+- **Code Linting**: Install development dependencies for code quality
+  ```bash
+  pip install -e ".[dev]"
+  ```
+- **Testing**: Run tests with the development setup
+  ```bash
+  python -m pytest
+  ```
+
+## 🔧 Building and Distribution
+
+### Building the Package
+
+To build the package for distribution:
+
+```bash
+# Install build tools
+pip install build twine
+
+# Build the package
+python -m build
+```
+
+This will create the distribution files in the `dist/` directory:
+- `outlook_mcp_server-X.X.X-py3-none-any.whl` (wheel file)
+- `outlook_mcp_server-X.X.X.tar.gz` (source distribution)
+
+### Installing from Distribution Files
+
+```bash
+# Install from wheel file
+pip install dist/outlook_mcp_server-X.X.X-py3-none-any.whl
+
+# Or install from source distribution
+pip install dist/outlook_mcp_server-X.X.X.tar.gz
+```
+
+### Publishing to PyPI (for maintainers)
+
+```bash
+# Upload to PyPI (requires credentials)
+python -m twine upload dist/*
+```
 
 ## 🔧 Building with UVX
 
@@ -258,7 +405,7 @@ Use the configuration in your `mcp-config-python.json`:
 }
 ```
 
-Note: With Option B, you'll need to install the dependencies first:
+Note: With this approach, you'll need to install the dependencies first:
 ```bash
 pip install -r requirements.txt
 ```
