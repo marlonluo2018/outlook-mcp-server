@@ -1,55 +1,36 @@
 # Outlook MCP Server
 
-> **⚠️ Windows-Only Application**  
-> This MCP server requires Windows 10/11 and Microsoft Outlook due to COM automation dependencies.
+A powerful MCP (Model Context Protocol) server that provides seamless integration with Microsoft Outlook through COM interface. This server enables AI assistants to interact with your Outlook emails, including searching, reading, composing, and sending emails.
 
-A comprehensive Model Context Protocol (MCP) server that provides secure, efficient access to Microsoft Outlook functionality through Python COM automation. This server enables AI assistants and applications to interact with Outlook emails, folders, and contacts programmatically while maintaining enterprise-grade security and performance.
+## � Quick Start
 
-## 🚀 Overview
-
-The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook, providing a standardized interface for email operations. Built on the Model Context Protocol, it offers both programmatic API access and interactive CLI usage patterns.
-
-### Key Capabilities
-
-- **Email Operations**: Search, retrieve, compose, and reply to emails
-- **Advanced Search**: Intelligent word proximity search for more accurate results
-- **Folder Management**: Browse and access all Outlook folders
-- **Batch Processing**: Send bulk emails with CSV-based recipient lists (CLI only)
-- **Caching System**: Intelligent email caching for performance optimization
-- **Security**: Built-in user confirmation for email sending operations
-- **Error Handling**: Comprehensive error handling with retry mechanisms
-
-## 📋 Requirements
-
-### System Requirements
-
-- **Operating System**: Windows 10/11 (required for Outlook COM automation)
-- **Python**: 3.8 or higher
-- **Microsoft Outlook**: 2016 or later, properly configured and running
-- **COM Access**: Outlook must be accessible via COM (default for most installations)
-
-### Dependencies
-
-- `fastmcp==2.11.0`: MCP server framework
-- `pywin32==306`: Windows COM automation
-- Standard library: `argparse`, `csv`, `datetime`, `logging`, `typing`
-
-## 🛠️ Installation
-
-### Installation
-
-## Option 1: Editable Installation (Recommended for Development)
+### Option 1: Using UVX with Local Package (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git
 cd outlook-mcp-server
 
-# Install in editable mode (changes to source code immediately affect the installed package)
+# Run directly with UVX (no installation needed)
+uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outlook-mcp-server
+```
+
+### Option 2: Editable Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Create virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in editable mode
 pip install -e .
 ```
 
-## Option 2: Standard Installation
+### Option 3: Standard Installation
 
 ```bash
 # Clone the repository
@@ -64,24 +45,13 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install .
 ```
 
-## Option 3: Using UVX (No Installation Required)
-
-```bash
-# Clone the repository
-git clone https://github.com/marlonluo2018/outlook-mcp-server.git
-cd outlook-mcp-server
-
-# Run directly with UVX (no installation needed)
-uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
-```
-
 ## Running the Server
 
 ### Prerequisites
 
 Before running the server, you must either:
 1. Install the package using one of the installation methods above, or
-2. Use UVX (Option 3) which doesn't require installation
+2. Use UVX (Option 1) which doesn't require installation
 
 ### Option 1: As an MCP Server (for LLM integration)
 
@@ -95,7 +65,7 @@ python -m outlook_mcp_server
 Or with UVX (no installation needed):
 
 ```bash
-uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
+uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outlook-mcp-server
 ```
 
 ### Option 2: As a CLI Interface (for human interaction)
@@ -116,7 +86,7 @@ outlook-mcp-server
 
 # Quick Start
 
-## Option 1: Using UVX (Recommended)
+## Option 1: Using UVX with Local Package (Recommended)
 
 ```bash
 # Clone the repository
@@ -124,7 +94,7 @@ git clone https://github.com/marlonluo2018/outlook-mcp-server.git
 cd outlook-mcp-server
 
 # Run directly with UVX (no installation needed)
-uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
+uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outlook-mcp-server
 ```
 
 ## Option 2: Traditional Installation
@@ -143,9 +113,9 @@ python -m outlook_mcp_server
 
 ### MCP Configuration
 
-#### Recommended: UVX Configuration
+#### Recommended: UVX Configuration with Local Package
 
-Add to your MCP client configuration (e.g., Claude Desktop settings.json):
+For using the local package with UVX, use this configuration in your MCP client (e.g., Claude Desktop settings.json):
 
 ```json
 {
@@ -153,23 +123,23 @@ Add to your MCP client configuration (e.g., Claude Desktop settings.json):
     "outlook-mcp-server": {
       "command": "uvx",
       "args": [
-        "--with", "C:\\Project\\outlook-mcp-server",
-        "python", "-m", "outlook_mcp_server"
+        "--with", "pywin32>=226",
+        "--with-editable", "c:\\Project\\outlook-mcp-server",
+        "outlook-mcp-server"
       ]
     }
   }
 }
 ```
 
-#### Alternative: Direct Python Configuration
+#### Alternative: Local Development Configuration
 
-If you prefer not to use UVX, you can use direct Python execution:
+For local development without UVX, use this configuration:
 
 ```json
 {
   "mcpServers": {
-    "outlook": {
-      "type": "stdio",
+    "outlook-mcp-server": {
       "command": "python",
       "args": ["-m", "outlook_mcp_server"]
     }
@@ -177,9 +147,27 @@ If you prefer not to use UVX, you can use direct Python execution:
 }
 ```
 
-Note: With this approach, you'll need to manually install the dependencies:
+Note: With this approach, you'll need to install the dependencies first:
 ```bash
 pip install -r requirements.txt
+```
+
+#### Alternative: UVX Configuration (for published package)
+
+Once the package is published to PyPI, you can use UVX:
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--with", "pywin32>=226",
+        "outlook-mcp-server"
+      ]
+    }
+  }
+}
 ```
 
 ### Human Interface: CLI
@@ -229,12 +217,12 @@ The Outlook MCP Server is fully compatible with UVX. Here's how to build and run
 
 ```bash
 # Run the server directly with UVX
-uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
+uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outlook-mcp-server
 ```
 
 #### Method 2: MCP Configuration
 
-For MCP clients like Claude Desktop or Trae IDE, use this configuration in your `mcp-config.json`:
+For MCP clients like Claude Desktop or Trae IDE, use the UVX configuration in your `mcp-config-uvx.json`:
 
 ```json
 {
@@ -242,8 +230,9 @@ For MCP clients like Claude Desktop or Trae IDE, use this configuration in your 
     "outlook-mcp-server": {
       "command": "uvx",
       "args": [
-        "--with", "C:\\Project\\outlook-mcp-server",
-        "python", "-m", "outlook_mcp_server"
+        "--with", "pywin32>=226",
+        "--with-editable", "c:\\Project\\outlook-mcp-server",
+        "outlook-mcp-server"
       ]
     }
   }
@@ -256,6 +245,7 @@ For MCP clients like Claude Desktop or Trae IDE, use this configuration in your 
 - **Dependency Management**: Automatic handling of dependencies
 - **No System Pollution**: Keeps your system Python clean
 - **Reproducibility**: Consistent environments across different machines
+- **Editable Mode**: Supports local development with --with-editable flag
 
 ### Project Structure for UVX
 
@@ -282,7 +272,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "outlook-mcp-server"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
     "fastmcp==2.13.1",
     "pywin32==311"
@@ -296,6 +286,7 @@ This configuration allows UVX to:
 1. Identify the project dependencies
 2. Create an isolated environment
 3. Execute the server with all required packages
+4. Support editable mode for local development
 
 ### Troubleshooting UVX
 
@@ -828,6 +819,15 @@ Error: No emails in cache or Invalid cache item
 - Cache clears when new list/search operations are performed
 - Use view_email_cache to verify cache contents
 
+**MCP Server Communication Issues**
+```
+Error: Invalid JSON-RPC response or communication timeout
+```
+- Ensure you're using the latest version of the package
+- The MCP server communicates via JSON-RPC protocol over stdio
+- Any print statements to stdout will interfere with MCP communication
+- Check that your MCP client is properly configured for stdio transport
+
 ## 📋 Changelog
 
 ### v1.3.0 (Current)
@@ -836,6 +836,9 @@ Error: No emails in cache or Invalid cache item
 - **Module Execution**: Added __main__.py for module execution support
 - **Updated Documentation**: Comprehensive UVX configuration guide
 - **Improved Configuration**: Updated MCP configuration examples with UVX
+- **Fixed MCP Communication**: Removed stdout print statements that interfered with JSON-RPC protocol
+- **Better Error Handling**: Redirected error messages to stderr to avoid protocol conflicts
+- **Editable Mode Support**: Added support for --with-editable flag for local development
 
 ### v1.2.0
 - **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results

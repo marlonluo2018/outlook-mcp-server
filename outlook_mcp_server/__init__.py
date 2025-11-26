@@ -412,22 +412,18 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
 # Main function for UVX entry point
 def main():
     """Main function to start the Outlook MCP Server."""
-    print("Starting Outlook MCP Server...")
-    print("Connecting to Outlook...")
-    
     try:
         # Test Outlook connection using context manager
         with OutlookSessionManager() as session:
             inbox = session.get_folder()
-            print(f"Successfully connected to Outlook. Inbox has {inbox.Items.Count} items.")
             
             # Run the MCP server
-            print("Starting MCP server. Press Ctrl+C to stop.")
             mcp.run()
     except Exception as e:
-        print(f"Error starting server: {str(e)}")
+        # Use stderr for error messages to avoid interfering with JSON-RPC
+        import sys
+        print(f"Error starting server: {str(e)}", file=sys.stderr)
 
 # Run the server
 if __name__ == "__main__":
     main()
-

@@ -1,0 +1,12 @@
+{ 
+   "mcpServers": { 
+     "outlook-mcp-server": { 
+       "command": "uvx", 
+       "args": [ 
+         "--with", "pywin32>=226",
+         "--with-editable", "c:\\Project\\outlook-mcp-server",
+         "outlook-mcp-server"
+       ] 
+     } 
+   } 
+ }
