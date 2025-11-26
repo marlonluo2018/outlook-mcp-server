@@ -1,0 +1,10 @@
+{ 
+   "mcpServers": { 
+     "outlook-mcp-server": { 
+       "command": "python", 
+       "args": [ 
+         "-m", "outlook_mcp_server"
+       ] 
+     } 
+   } 
+ }

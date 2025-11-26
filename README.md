@@ -113,7 +113,7 @@ python -m outlook_mcp_server
 
 ### MCP Configuration
 
-#### Recommended: UVX Configuration with Local Package
+#### Option 1: UVX Configuration with Local Package (Recommended)
 
 For using the local package with UVX, use this configuration in your MCP client (e.g., Claude Desktop settings.json):
 
@@ -132,9 +132,9 @@ For using the local package with UVX, use this configuration in your MCP client 
 }
 ```
 
-#### Alternative: Local Development Configuration
+#### Option 2: Direct Python Command Configuration
 
-For local development without UVX, use this configuration:
+For MCP clients that support direct Python commands or if you prefer to use your existing Python installation:
 
 ```json
 {
@@ -152,7 +152,9 @@ Note: With this approach, you'll need to install the dependencies first:
 pip install -r requirements.txt
 ```
 
-#### Alternative: UVX Configuration (for published package)
+This configuration file is provided as `mcp-config-python.json` in the project root for convenience.
+
+#### Option 3: UVX Configuration (for published package)
 
 Once the package is published to PyPI, you can use UVX:
 
@@ -222,7 +224,10 @@ uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outl
 
 #### Method 2: MCP Configuration
 
-For MCP clients like Claude Desktop or Trae IDE, use the UVX configuration in your `mcp-config-uvx.json`:
+For MCP clients like Claude Desktop or Trae IDE, you have two configuration options:
+
+**Option A: UVX Configuration (Recommended)**
+Use the configuration in your `mcp-config-uvx.json`:
 
 ```json
 {
@@ -237,6 +242,25 @@ For MCP clients like Claude Desktop or Trae IDE, use the UVX configuration in yo
     }
   }
 }
+```
+
+**Option B: Direct Python Command**
+Use the configuration in your `mcp-config-python.json`:
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "python",
+      "args": ["-m", "outlook_mcp_server"]
+    }
+  }
+}
+```
+
+Note: With Option B, you'll need to install the dependencies first:
+```bash
+pip install -r requirements.txt
 ```
 
 ### UVX Benefits
