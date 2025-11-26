@@ -36,20 +36,20 @@ The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook,
 
 ## 🛠️ Installation
 
-### Quick Start
+### Installation
 
-#### Option 1: Using UVX (Recommended)
+## Option 1: Editable Installation (Recommended for Development)
 
 ```bash
 # Clone the repository
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git
 cd outlook-mcp-server
 
-# Run directly with UVX (no installation needed)
-uvx --with "C:\Project\outlook-mcp-server" python "C:\Project\outlook-mcp-server\outlook_mcp_server.py"
+# Install in editable mode (changes to source code immediately affect the installed package)
+pip install -e .
 ```
 
-#### Option 2: Traditional Installation
+## Option 2: Standard Installation
 
 ```bash
 # Clone the repository
@@ -60,8 +60,85 @@ cd outlook-mcp-server
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install requirements
-pip install -r requirements.txt
+# Install the package
+pip install .
+```
+
+## Option 3: Using UVX (No Installation Required)
+
+```bash
+# Clone the repository
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Run directly with UVX (no installation needed)
+uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
+```
+
+## Running the Server
+
+### Prerequisites
+
+Before running the server, you must either:
+1. Install the package using one of the installation methods above, or
+2. Use UVX (Option 3) which doesn't require installation
+
+### Option 1: As an MCP Server (for LLM integration)
+
+After installation:
+
+```bash
+# Run the MCP server
+python -m outlook_mcp_server
+```
+
+Or with UVX (no installation needed):
+
+```bash
+uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
+```
+
+### Option 2: As a CLI Interface (for human interaction)
+
+After installation:
+
+```bash
+# Run the CLI interface
+python -m outlook_mcp_server.cli_interface
+```
+
+### Option 3: Using the Package Command (after installation)
+
+```bash
+# Run using the package command
+outlook-mcp-server
+```
+
+# Quick Start
+
+## Option 1: Using UVX (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Run directly with UVX (no installation needed)
+uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
+```
+
+## Option 2: Traditional Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Install the package
+pip install -e .
+
+# Run the server
+python -m outlook_mcp_server
 ```
 
 ### MCP Configuration
@@ -77,7 +154,7 @@ Add to your MCP client configuration (e.g., Claude Desktop settings.json):
       "command": "uvx",
       "args": [
         "--with", "C:\\Project\\outlook-mcp-server",
-        "python", "C:\\Project\\outlook-mcp-server\\outlook_mcp_server.py"
+        "python", "-m", "outlook_mcp_server"
       ]
     }
   }
@@ -94,7 +171,7 @@ If you prefer not to use UVX, you can use direct Python execution:
     "outlook": {
       "type": "stdio",
       "command": "python",
-      "args": ["C:\\Project\\outlook-mcp-server\\outlook_mcp_server.py"]
+      "args": ["-m", "outlook_mcp_server"]
     }
   }
 }
@@ -119,17 +196,24 @@ The CLI interface is designed exclusively for human users, not LLMs:
 
 ```bash
 # Start interactive session (human only)
-python cli_interface.py
+python -m outlook_mcp_server.cli_interface
 ```
 
 Note: For LLM integration, use the MCP server interface instead.
 
 ### Development Installation
 
+For development, we recommend installing in editable mode:
+
 ```bash
-# Install development dependencies
+# Install in editable mode with development dependencies
 pip install -e ".[dev]"
 ```
+
+**Benefits of editable installation:**
+- Changes to source code immediately affect the installed package
+- No need to reinstall after making changes
+- Ideal for testing and development
 
 ## 🔧 Building with UVX
 
@@ -145,7 +229,7 @@ The Outlook MCP Server is fully compatible with UVX. Here's how to build and run
 
 ```bash
 # Run the server directly with UVX
-uvx --with "C:\Project\outlook-mcp-server" python "C:\Project\outlook-mcp-server\outlook_mcp_server.py"
+uvx --with "C:\Project\outlook-mcp-server" python -m outlook_mcp_server
 ```
 
 #### Method 2: MCP Configuration
@@ -159,7 +243,7 @@ For MCP clients like Claude Desktop or Trae IDE, use this configuration in your 
       "command": "uvx",
       "args": [
         "--with", "C:\\Project\\outlook-mcp-server",
-        "python", "C:\\Project\\outlook-mcp-server\\outlook_mcp_server.py"
+        "python", "-m", "outlook_mcp_server"
       ]
     }
   }
@@ -180,9 +264,8 @@ The project is structured to work seamlessly with UVX:
 ```
 outlook-mcp-server/
 ├── pyproject.toml          # Project metadata and dependencies
-├── outlook_mcp_server.py    # Main server entry point
 ├── outlook_mcp_server/      # Package directory
-│   ├── __init__.py
+│   ├── __init__.py         # Main package initialization
 │   ├── __main__.py         # Enables module execution (python -m outlook_mcp_server)
 │   └── backend/            # Backend modules
 └── requirements.txt        # Dependencies
