@@ -61,7 +61,7 @@ This will create distribution files in the `dist/` directory:
 
 Note: Pre-built distribution files are already included in the `dist/` folder, so you can use those directly with `pip install dist/outlook_mcp_server-0.1.0-py3-none-any.whl`.
 
-## ⚡ Quick Start
+## ⚡ Quick Start: Installation Methods
 
 Choose one of the following installation options:
 
@@ -134,7 +134,7 @@ pip install -r requirements.txt
 python outlook_mcp_server/__main__.py
 ```
 
-## Running the Server
+## Running the Server: Usage Methods
 
 ### Prerequisites
 
@@ -173,7 +173,7 @@ python -m outlook_mcp_server.cli_interface
 outlook-mcp-server
 ```
 
-## MCP Configuration
+## MCP Configuration: Integration Methods
 
 ### Option 1: UVX Configuration with Local Package (Recommended)
 
