@@ -1,7 +1,7 @@
 from typing import List, Optional
 
-from backend.outlook_session import OutlookSessionManager
-from backend.shared import email_cache
+from .outlook_session import OutlookSessionManager
+from .shared import email_cache
 
 def reply_to_email_by_number(
     email_number: int,

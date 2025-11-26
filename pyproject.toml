@@ -22,8 +22,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "fastmcp==2.11.0",
-    "pywin32==306",
+    "fastmcp==2.13.1",
+    "pywin32==311",
 ]
 
 [project.optional-dependencies]
@@ -45,7 +45,7 @@ outlook-mcp-server = "outlook_mcp_server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["outlook_mcp_server*"]
-exclude = ["tests*"]
+exclude = ["tests*", "tests", "test_*"]
 
 [tool.black]
 line-length = 100

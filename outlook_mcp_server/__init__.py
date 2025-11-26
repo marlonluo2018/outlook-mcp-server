@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastmcp import FastMCP
-from backend.outlook_session import OutlookSessionManager
-from backend.email_retrieval import (
+from .backend.outlook_session import OutlookSessionManager
+from .backend.email_retrieval import (
     list_folders,
     search_email_by_subject,
     search_email_by_from,
@@ -11,7 +11,7 @@ from backend.email_retrieval import (
     get_email_by_number,
     list_recent_emails
 )
-from backend.email_composition import (
+from .backend.email_composition import (
     reply_to_email_by_number,
     compose_email
 )
@@ -409,8 +409,9 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
     }
 
 
-# Run the server
-if __name__ == "__main__":
+# Main function for UVX entry point
+def main():
+    """Main function to start the Outlook MCP Server."""
     print("Starting Outlook MCP Server...")
     print("Connecting to Outlook...")
     
@@ -425,4 +426,8 @@ if __name__ == "__main__":
             mcp.run()
     except Exception as e:
         print(f"Error starting server: {str(e)}")
+
+# Run the server
+if __name__ == "__main__":
+    main()
 

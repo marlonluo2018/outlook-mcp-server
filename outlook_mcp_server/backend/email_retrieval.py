@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 import time
 import pythoncom
 from typing import List, Dict, Optional
-from backend.outlook_session import OutlookSessionManager
-from backend.shared import MAX_DAYS, MAX_EMAILS, MAX_LOAD_TIME, email_cache
+from .outlook_session import OutlookSessionManager
+from .shared import MAX_DAYS, MAX_EMAILS, MAX_LOAD_TIME, email_cache
 
 def get_emails_from_folder(
     search_term: Optional[str] = None,

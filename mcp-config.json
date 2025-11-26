@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--with", "C:\\Project\\outlook-mcp-server", 
+        "python", "C:\\Project\\outlook-mcp-server\\outlook_mcp_server.py"
+      ]
+    }
+  }
+}

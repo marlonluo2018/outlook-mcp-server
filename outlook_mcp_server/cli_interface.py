@@ -4,9 +4,9 @@ from typing import Optional
 
 # Import handling for both direct execution and module usage
 try:
-    # First try absolute imports (direct execution)
-    from backend.outlook_session import OutlookSessionManager
-    from backend.email_retrieval import (
+    # First try imports from outlook_mcp_server package (direct execution)
+    from outlook_mcp_server.backend.outlook_session import OutlookSessionManager
+    from outlook_mcp_server.backend.email_retrieval import (
     list_recent_emails,
     search_email_by_subject,
     search_email_by_from,
@@ -16,12 +16,12 @@ try:
     list_folders,
     view_email_cache
 )
-    from backend.email_composition import (
+    from outlook_mcp_server.backend.email_composition import (
         compose_email,
         reply_to_email_by_number
     )
-    from backend.batch_operations import send_batch_emails
-    from backend.shared import email_cache
+    from outlook_mcp_server.backend.batch_operations import send_batch_emails
+    from outlook_mcp_server.backend.shared import email_cache
 except ImportError:
     try:
         # Then try relative imports (module usage)
@@ -43,8 +43,8 @@ except ImportError:
     except ImportError:
         # Finally try direct imports from same directory
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from backend.outlook_session import OutlookSessionManager
-        from backend.email_retrieval import (
+        from outlook_mcp_server.backend.outlook_session import OutlookSessionManager
+        from outlook_mcp_server.backend.email_retrieval import (
         search_email_by_subject,
         search_email_by_from,
         search_email_by_to,
@@ -52,12 +52,12 @@ except ImportError:
         get_email_by_number,
         list_folders
     )
-        from backend.email_composition import (
+        from outlook_mcp_server.backend.email_composition import (
             compose_email,
             reply_to_email_by_number
         )
-        from backend.batch_operations import send_batch_emails
-        from backend.shared import email_cache
+        from outlook_mcp_server.backend.batch_operations import send_batch_emails
+        from outlook_mcp_server.backend.shared import email_cache
 
 def show_menu():
     print("\nOutlook MCP Server - Interactive Mode")

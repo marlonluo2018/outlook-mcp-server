@@ -1,7 +1,7 @@
 import csv
 
-from backend.outlook_session import OutlookSessionManager
-from backend.shared import email_cache
+from .outlook_session import OutlookSessionManager
+from .shared import email_cache
 
 def send_batch_emails(
     email_number: int,

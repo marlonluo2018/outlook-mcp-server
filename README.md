@@ -38,6 +38,19 @@ The Outlook MCP Server bridges the gap between AI systems and Microsoft Outlook,
 
 ### Quick Start
 
+#### Option 1: Using UVX (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Run directly with UVX (no installation needed)
+uvx --with "C:\Project\outlook-mcp-server" python "C:\Project\outlook-mcp-server\outlook_mcp_server.py"
+```
+
+#### Option 2: Traditional Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git
@@ -53,7 +66,27 @@ pip install -r requirements.txt
 
 ### MCP Configuration
 
+#### Recommended: UVX Configuration
+
 Add to your MCP client configuration (e.g., Claude Desktop settings.json):
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--with", "C:\\Project\\outlook-mcp-server",
+        "python", "C:\\Project\\outlook-mcp-server\\outlook_mcp_server.py"
+      ]
+    }
+  }
+}
+```
+
+#### Alternative: Direct Python Configuration
+
+If you prefer not to use UVX, you can use direct Python execution:
 
 ```json
 {
@@ -65,6 +98,11 @@ Add to your MCP client configuration (e.g., Claude Desktop settings.json):
     }
   }
 }
+```
+
+Note: With this approach, you'll need to manually install the dependencies:
+```bash
+pip install -r requirements.txt
 ```
 
 ### Human Interface: CLI
@@ -92,6 +130,115 @@ Note: For LLM integration, use the MCP server interface instead.
 # Install development dependencies
 pip install -e ".[dev]"
 ```
+
+## 🔧 Building with UVX
+
+### What is UVX?
+
+UVX is a Python application runner that creates isolated environments for Python applications. It's ideal for running Python tools with their dependencies without polluting your system Python installation.
+
+### Building with UVX
+
+The Outlook MCP Server is fully compatible with UVX. Here's how to build and run it using UVX:
+
+#### Method 1: Direct Execution
+
+```bash
+# Run the server directly with UVX
+uvx --with "C:\Project\outlook-mcp-server" python "C:\Project\outlook-mcp-server\outlook_mcp_server.py"
+```
+
+#### Method 2: MCP Configuration
+
+For MCP clients like Claude Desktop or Trae IDE, use this configuration in your `mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--with", "C:\\Project\\outlook-mcp-server",
+        "python", "C:\\Project\\outlook-mcp-server\\outlook_mcp_server.py"
+      ]
+    }
+  }
+}
+```
+
+### UVX Benefits
+
+- **Isolation**: Each application runs in its own environment
+- **Dependency Management**: Automatic handling of dependencies
+- **No System Pollution**: Keeps your system Python clean
+- **Reproducibility**: Consistent environments across different machines
+
+### Project Structure for UVX
+
+The project is structured to work seamlessly with UVX:
+
+```
+outlook-mcp-server/
+├── pyproject.toml          # Project metadata and dependencies
+├── outlook_mcp_server.py    # Main server entry point
+├── outlook_mcp_server/      # Package directory
+│   ├── __init__.py
+│   ├── __main__.py         # Enables module execution (python -m outlook_mcp_server)
+│   └── backend/            # Backend modules
+└── requirements.txt        # Dependencies
+```
+
+### UVX Configuration Details
+
+The `pyproject.toml` file contains the project metadata and dependencies:
+
+```toml
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "outlook-mcp-server"
+version = "1.2.0"
+dependencies = [
+    "fastmcp==2.13.1",
+    "pywin32==311"
+]
+
+[project.scripts]
+outlook-mcp-server = "outlook_mcp_server:main"
+```
+
+This configuration allows UVX to:
+1. Identify the project dependencies
+2. Create an isolated environment
+3. Execute the server with all required packages
+
+### Troubleshooting UVX
+
+**Module Not Found Error**
+```
+ModuleNotFoundError: No module named 'fastmcp'
+```
+- Ensure `pyproject.toml` is in the project root
+- Check that dependencies are correctly listed
+- Verify the project path is correct in the UVX command
+
+**Path Issues**
+```
+FileNotFoundError: [Errno 2] No such file or directory
+```
+- Use absolute paths in your configuration
+- Ensure paths use proper escaping for backslashes on Windows
+- Verify the project directory structure is correct
+
+**Permission Issues**
+```
+Permission denied: .../outlook_mcp_server.py
+```
+- Ensure the Python script has execute permissions
+- Run with appropriate user privileges
+- Check that antivirus software isn't blocking execution
 
 ### Configuration Constants
 
@@ -600,7 +747,14 @@ Error: No emails in cache or Invalid cache item
 
 ## 📋 Changelog
 
-### v1.2.0 (Current)
+### v1.3.0 (Current)
+- **UVX Support**: Added full support for UVX application runner
+- **Enhanced Installation**: Simplified installation process with UVX
+- **Module Execution**: Added __main__.py for module execution support
+- **Updated Documentation**: Comprehensive UVX configuration guide
+- **Improved Configuration**: Updated MCP configuration examples with UVX
+
+### v1.2.0
 - **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results
 - **Improved Search Precision**: Word-based searches now check if search terms appear close to each other
 - **Better Search Documentation**: Comprehensive guide on different search types and parameters
