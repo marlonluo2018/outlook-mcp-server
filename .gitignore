@@ -21,3 +21,5 @@ outlook_mcp_server/backend/__pycache__/email_composition.cpython-311.pyc
 outlook_mcp_server/backend/__pycache__/email_retrieval.cpython-311.pyc
 outlook_mcp_server/backend/__pycache__/outlook_session.cpython-311.pyc
 outlook_mcp_server/backend/__pycache__/shared.cpython-311.pyc
+outlook_mcp_server/backend/__pycache__/batch_operations.cpython-311.pyc
+.gitignore

@@ -2,6 +2,19 @@
 
 A powerful MCP (Model Context Protocol) server that provides seamless integration with Microsoft Outlook through COM interface. This server enables AI assistants to interact with your Outlook emails, including searching, reading, composing, and sending emails.
 
+## ⭐ Star This Project
+
+If you find this project useful, please consider giving it a star on GitHub! Your support helps:
+
+- Increase visibility of the project
+- Motivate continued development and maintenance
+- Show appreciation for the work put into this tool
+- Help others discover this useful integration
+
+[![Star History Chart](https://api.star-history.com/svg?repos=marlonluo2018/outlook-mcp-server&type=Date)](https://star-history.com/#marlonluo2018/outlook-mcp-server&Date)
+
+Thank you for your support! 🙏
+
 ## Prerequisites
 
 Before installing and running the Outlook MCP Server, ensure you have the following:
@@ -1051,3 +1064,16 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **Issues**: [GitHub Issues](https://github.com/marlonluo2018/outlook-mcp-server/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/marlonluo2018/outlook-mcp-server/discussions)
 - **Documentation**: This README and [UPDATED_SEARCH_GUIDE.md](UPDATED_SEARCH_GUIDE.md)
+
+## ⭐ Show Your Appreciation
+
+If you've found this project helpful for integrating Outlook with AI assistants, please consider:
+
+1. **Starring the repository** on GitHub
+2. **Sharing it** with colleagues who might benefit
+3. **Reporting bugs** or suggesting features
+4. **Contributing** code or documentation improvements
+
+Your support helps keep this project active and maintained for the entire community!
+
+[![GitHub stars](https://img.shields.io/github/stars/marlonluo2018/outlook-mcp-server?style=social)](https://github.com/marlonluo2018/outlook-mcp-server)
