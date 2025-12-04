@@ -1,3 +1,31 @@
+Metadata-Version: 2.4
+Name: outlook-mcp-server
+Version: 0.1.0
+Summary: MCP server for Outlook email operations
+Author-email: marlonluo2018 <marlonluo2018@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/marlonluo2018/outlook-mcp-server
+Project-URL: Repository, https://github.com/marlonluo2018/outlook-mcp-server
+Project-URL: Issues, https://github.com/marlonluo2018/outlook-mcp-server/issues
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: fastmcp==2.13.1
+Requires-Dist: pywin32==311
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: black>=22.0; extra == "dev"
+Requires-Dist: flake8>=4.0; extra == "dev"
+Requires-Dist: mypy>=0.950; extra == "dev"
+
 # Outlook MCP Server
 
 A powerful MCP (Model Context Protocol) server that provides seamless integration with Microsoft Outlook through COM interface. This server enables AI assistants to interact with your Outlook emails, including searching, reading, composing, and sending emails.
@@ -175,14 +203,7 @@ uvx --with "pywin32>=226" --with-editable "c:\\Project\\outlook-mcp-server" outl
 After installation:
 
 ```bash
-# Run the CLI interface from the root directory
-python cli_interface.py
-```
-
-Or using the module approach:
-
-```bash
-# Run the CLI interface as a module
+# Run the CLI interface
 python -m outlook_mcp_server.cli_interface
 ```
 
@@ -289,13 +310,7 @@ The CLI interface is designed exclusively for human users, not LLMs:
   3. Cache auto-refreshes on new operations
 
 ```bash
-# Start interactive session from the root directory (human only)
-python cli_interface.py
-```
-
-Alternatively, you can run it as a module:
-```bash
-# Run as a module
+# Start interactive session (human only)
 python -m outlook_mcp_server.cli_interface
 ```
 
@@ -437,7 +452,6 @@ The project is structured to work seamlessly with UVX:
 
 ```
 outlook-mcp-server/
-├── cli_interface.py         # Interactive CLI interface (moved to root for easy access)
 ├── pyproject.toml          # Project metadata and dependencies
 ├── outlook_mcp_server/      # Package directory
 │   ├── __init__.py         # Main package initialization
@@ -563,13 +577,7 @@ Ask your AI assistant to:
 
 **Getting Started**:
 ```bash
-# Start the interactive email session from the root directory
-python cli_interface.py
-```
-
-Alternatively, you can run it as a module:
-```bash
-# Run as a module
+# Start the interactive email session
 python -m outlook_mcp_server.cli_interface
 ```
 
@@ -1030,7 +1038,6 @@ Error: Invalid JSON-RPC response or communication timeout
 - **Fixed MCP Communication**: Removed stdout print statements that interfered with JSON-RPC protocol
 - **Better Error Handling**: Redirected error messages to stderr to avoid protocol conflicts
 - **Editable Mode Support**: Added support for --with-editable flag for local development
-- **CLI Interface Location**: Moved cli_interface.py to root directory for easier access
 
 ### v1.2.0
 - **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results
