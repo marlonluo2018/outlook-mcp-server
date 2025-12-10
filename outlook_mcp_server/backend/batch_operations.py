@@ -73,23 +73,77 @@ def send_batch_emails(
                     # Create a regular mail item instead of using Forward()
                     mail = session.outlook.CreateItem(0)  # 0 = olMailItem
                     
-                    # Copy relevant properties from template
-                    mail.Subject = f"FW: {template.Subject}"
+                    # Copy relevant properties from template with encoding handling
+                    try:
+                        # Handle subject encoding
+                        subject = template.Subject
+                        if isinstance(subject, bytes):
+                            subject = subject.decode('utf-8', errors='replace')
+                        elif not isinstance(subject, str):
+                            subject = str(subject)
+                        
+                        mail.Subject = f"FW: {subject}"
+                    except Exception as e:
+                        print(f"WARNING: Encoding error in batch subject: {e}")
+                        mail.Subject = "FW: [Subject encoding error]"
+                    
                     mail.BCC = "; ".join(batch)
                     
-                    # Copy body content from template
-                    if hasattr(template, 'HTMLBody') and template.HTMLBody:
-                        mail.BodyFormat = 2  # 2 = olFormatHTML
-                        if custom_text:
-                            mail.HTMLBody = f"<div>{custom_text}</div><br><br>" + template.HTMLBody
+                    # Copy body content from template with proper encoding
+                    try:
+                        if hasattr(template, 'HTMLBody') and template.HTMLBody:
+                            mail.BodyFormat = 2  # 2 = olFormatHTML
+                            
+                            # Handle HTML body encoding
+                            html_body = template.HTMLBody
+                            if isinstance(html_body, bytes):
+                                html_body = html_body.decode('utf-8', errors='replace')
+                            elif not isinstance(html_body, str):
+                                html_body = str(html_body)
+                            
+                            # Handle custom text encoding
+                            if custom_text:
+                                if isinstance(custom_text, bytes):
+                                    custom_text = custom_text.decode('utf-8', errors='replace')
+                                elif not isinstance(custom_text, str):
+                                    custom_text = str(custom_text)
+                                
+                                safe_custom = custom_text.encode('ascii', errors='replace').decode('ascii')
+                                mail.HTMLBody = f"<div>{safe_custom}</div><br><br>" + html_body
+                            else:
+                                mail.HTMLBody = html_body
                         else:
-                            mail.HTMLBody = template.HTMLBody
-                    else:
-                        mail.BodyFormat = 1  # 1 = olFormatPlain
-                        if custom_text:
-                            mail.Body = custom_text + "\n\n-----Original Email-----\n\n" + template.Body
+                            mail.BodyFormat = 1  # 1 = olFormatPlain
+                            
+                            # Handle plain text body encoding
+                            plain_body = template.Body
+                            if isinstance(plain_body, bytes):
+                                plain_body = plain_body.decode('utf-8', errors='replace')
+                            elif not isinstance(plain_body, str):
+                                plain_body = str(plain_body)
+                            
+                            if custom_text:
+                                # Handle custom text encoding
+                                if isinstance(custom_text, bytes):
+                                    custom_text = custom_text.decode('utf-8', errors='replace')
+                                elif not isinstance(custom_text, str):
+                                    custom_text = str(custom_text)
+                                
+                                safe_custom = custom_text.encode('ascii', errors='replace').decode('ascii')
+                                mail.Body = safe_custom + "\n\n-----Original Email-----\n\n" + plain_body
+                            else:
+                                mail.Body = plain_body
+                    except UnicodeDecodeError as e:
+                        print(f"WARNING: Encoding error in batch body content: {e}")
+                        # Fallback to simple ASCII-safe content
+                        if hasattr(template, 'HTMLBody') and template.HTMLBody:
+                            mail.BodyFormat = 1  # Fallback to plain text
+                            mail.Body = "[HTML content with encoding issues - please view original email]"
                         else:
-                            mail.Body = template.Body
+                            mail.Body = "[Content encoding error - please view original email]"
+                    except Exception as e:
+                        print(f"WARNING: Error processing batch body: {e}")
+                        mail.Body = "[Content processing error - please view original email]"
                     
                     mail.Send()
                     results.append(f"Batch {i} sent to {len(batch)} recipients")

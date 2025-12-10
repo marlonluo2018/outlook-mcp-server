@@ -236,6 +236,8 @@ pip install -r requirements.txt
 
 This configuration file is provided as `mcp-config-python.json` in the project root for convenience.
 
+**Note**: This is different from direct source execution (Option 4). This approach requires the package to be installed, while Option 4 runs directly from source code.
+
 ### Option 3: UVX Configuration (for published package)
 
 Once the package is published to PyPI, you can use UVX:
@@ -254,9 +256,9 @@ Once the package is published to PyPI, you can use UVX:
 }
 ```
 
-### Option 4: Direct Python File Execution
+### Option 4: Direct Source Code Execution (For Testing and Development)
 
-For MCP clients that support direct Python file execution or if you prefer to run the Python file directly:
+For testing purposes or development, you can run directly from the source code without package installation:
 
 ```json
 {
@@ -269,12 +271,14 @@ For MCP clients that support direct Python file execution or if you prefer to ru
 }
 ```
 
-Note: With this approach, you'll need to install the dependencies first:
-```bash
-pip install -r requirements.txt
-```
+**Important Notes:**
+- This configuration runs the server directly from the source code
+- Requires you to be in the project root directory  
+- Dependencies must be installed: `pip install -r requirements.txt`
+- This method is ideal for testing changes and development
+- The working directory should be set to the project root
 
-This configuration file is provided as `mcp-config-python.json` in the project root for convenience.
+This configuration file is provided as `mcp-config-direct.json` in the project root for convenience.
 
 ### Human Interface: CLI
 
@@ -404,7 +408,7 @@ Use the configuration in your `mcp-config-uvx.json`:
 }
 ```
 
-**Option B: Direct Python Command**
+**Option B: Direct Python Command (Package Mode)**
 Use the configuration in your `mcp-config-python.json`:
 
 ```json
@@ -422,6 +426,22 @@ Note: With this approach, you'll need to install the dependencies first:
 ```bash
 pip install -r requirements.txt
 ```
+
+**Option C: Direct Source Code Execution (Development Mode)**
+For testing and development, use the configuration in your `mcp-config-direct.json`:
+
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "python",
+      "args": ["outlook_mcp_server/__main__.py"]
+    }
+  }
+}
+```
+
+Note: This approach runs directly from source code without package installation and requires the working directory to be set to the project root.
 
 ### UVX Benefits
 
@@ -1019,6 +1039,16 @@ Error: Invalid JSON-RPC response or communication timeout
 - Any print statements to stdout will interfere with MCP communication
 - Check that your MCP client is properly configured for stdio transport
 
+**Email Encoding Issues (v1.3.0+)**
+```
+Error: 'gbk' codec can't encode character '\xdf' in position 1084: illegal multibyte sequence
+```
+- **RESOLVED**: This issue has been fixed in v1.3.0
+- The system now automatically handles encoding issues with international characters
+- Multi-encoding support: UTF-8, GBK, GB2312, ISO-8859-1, CP1252
+- Graceful fallback: problematic content is replaced with user-friendly messages
+- No action required: update to v1.3.0 or later to benefit from encoding fixes
+
 ## 📋 Changelog
 
 ### v1.3.0 (Current)
@@ -1031,6 +1061,11 @@ Error: Invalid JSON-RPC response or communication timeout
 - **Better Error Handling**: Redirected error messages to stderr to avoid protocol conflicts
 - **Editable Mode Support**: Added support for --with-editable flag for local development
 - **CLI Interface Location**: Moved cli_interface.py to root directory for easier access
+- **Encoding Fixes**: Resolved GBK codec encoding issues in email reply functionality
+- **Enhanced Error Handling**: Added robust encoding fallback mechanisms for international characters
+- **Multi-Encoding Support**: Added support for UTF-8, GBK, GB2312, ISO-8859-1, and CP1252 encodings
+- **ASCII Fallback**: Implemented ASCII-safe content conversion to prevent COM object errors
+- **Improved User Experience**: Replaced cryptic encoding errors with user-friendly fallback messages
 
 ### v1.2.0
 - **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results
