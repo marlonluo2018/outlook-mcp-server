@@ -1,0 +1,8 @@
+fastmcp==2.13.1
+pywin32==311
+
+[dev]
+pytest>=7.0
+black>=22.0
+flake8>=4.0
+mypy>=0.950

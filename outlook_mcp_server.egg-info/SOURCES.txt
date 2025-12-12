@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+outlook_mcp_server/__init__.py
+outlook_mcp_server/__main__.py
+outlook_mcp_server.egg-info/PKG-INFO
+outlook_mcp_server.egg-info/SOURCES.txt
+outlook_mcp_server.egg-info/dependency_links.txt
+outlook_mcp_server.egg-info/entry_points.txt
+outlook_mcp_server.egg-info/requires.txt
+outlook_mcp_server.egg-info/top_level.txt
+outlook_mcp_server/backend/__init__.py
+outlook_mcp_server/backend/batch_operations.py
+outlook_mcp_server/backend/email_composition.py
+outlook_mcp_server/backend/email_retrieval.py
+outlook_mcp_server/backend/outlook_session.py
+outlook_mcp_server/backend/shared.py
