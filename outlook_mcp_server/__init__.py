@@ -9,7 +9,8 @@ from .backend.email_retrieval import (
     search_email_by_body,
     view_email_cache,
     get_email_by_number,
-    list_recent_emails
+    list_recent_emails,
+    format_search_results
 )
 from .backend.email_composition import (
     reply_to_email_by_number,
@@ -138,8 +139,10 @@ def search_email_by_sender_name_tool(
         raise ValueError("Days parameter must be an integer")
     emails, note = search_email_by_from(search_term, days, folder_name, match_all=match_all)
     result = f"Found {len(emails)} matching emails{note}"
+    
     if emails:
-        preview = view_email_cache(1)
+        # Format filtered search results
+        preview = format_search_results(emails, page=1, per_page=5)
         return {
             "type": "text",
             "text": f"{result}\n\n{preview}"

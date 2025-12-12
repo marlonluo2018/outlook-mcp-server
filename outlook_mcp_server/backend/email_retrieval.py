@@ -166,8 +166,14 @@ def get_emails_from_folder(
                                 
                             # Only process if within date range
                             if received_datetime >= threshold_date:
-                                # Extract just the display name from SenderName (before first '/')
-                                sender_name = getattr(item, 'SenderName', 'Unknown Sender').split('/')[0].strip()
+                                # Extract and clean sender name from SenderName
+                                raw_sender_name = getattr(item, 'SenderName', 'Unknown Sender')
+                                # Remove common Outlook formatting patterns
+                                sender_name = raw_sender_name.split('/')[0].strip()  # Remove path info
+                                sender_name = sender_name.split('[')[0].strip()  # Remove email addresses in brackets
+                                sender_name = sender_name.split(',')[0].strip()  # Handle "Last, First" format
+                                # Clean up extra whitespace and special characters
+                                sender_name = ' '.join(sender_name.split())  # Normalize whitespace
                                 
                                 
                                 email_data = {
@@ -485,6 +491,57 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
     
     return result
 
+def format_search_results(emails: List[Dict], page: int = 1, per_page: int = 5) -> str:
+    """Format search results for display with pagination
+    
+    Args:
+        emails: List of email dictionaries
+        page: Page number (1-based)
+        per_page: Items per page
+        
+    Returns:
+        Formatted email previews as string
+    """
+    if not emails:
+        return "No matching emails found."
+    
+    total_emails = len(emails)
+    total_pages = (total_emails + per_page - 1) // per_page
+    
+    if page > total_pages:
+        return f"Error: Page {page} does not exist. There are only {total_pages} pages."
+    
+    start_idx = (page - 1) * per_page
+    end_idx = min(page * per_page, total_emails)
+    
+    result = f"Showing emails {start_idx + 1}-{end_idx} of {total_emails} (Page {page}/{total_pages}):\n\n"
+    for i in range(start_idx, end_idx):
+        email = emails[i]
+        result += f"Email #{i + 1}\n"
+        result += f"Subject: {email['subject']}\n"
+        
+        # Display sender name as-is
+        result += f"From: {email['sender']}\n"
+        
+        # Display TO recipients if available
+        if email.get('to_recipients'):
+            to_names = [r.get('name', '') for r in email['to_recipients']]
+            result += f"To: {', '.join(to_names)}\n"
+        
+        # Display CC recipients if available
+        if email.get('cc_recipients'):
+            cc_names = [r.get('name', '') for r in email['cc_recipients']]
+            result += f"Cc: {', '.join(cc_names)}\n"
+        
+        result += f"Received: {email['received_time']}\n"
+        result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
+        result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
+    
+    result += f"Use search_email_by_sender_name_tool(search_term='{email.get('sender', '')}', days={30}, page={page + 1}) to view next page." if page < total_pages else "This is the last page."
+    result += "\nCall get_email_details_tool() to get full content of the email."
+    
+    return result
+
 # Add specialized search functions for MCP server compatibility
 def search_email_by_subject(
     search_term: str,
@@ -538,12 +595,18 @@ def search_email_by_from(
     
     # Filter by sender name
     if search_term:
-        # Parse search terms for filtering
-        search_terms = search_term.lower().split()
+        # Clean and parse search terms
+        search_term_clean = search_term.strip().lower()
+        search_terms = search_term_clean.split()
         filtered_emails = []
         
+        # Handle edge case where search term becomes empty after cleaning
+        if not search_terms or not search_terms[0]:
+            search_terms = [search_term_clean]
+        
+        # Primary search: exact substring matching
         for email in emails:
-            sender_name = email.get('sender', '').lower()
+            sender_name = email.get('sender', '').strip().lower()
             
             if match_all:
                 # AND logic: ALL search terms must be found in sender name
@@ -553,6 +616,31 @@ def search_email_by_from(
                 # OR logic: ANY search term can match
                 if any(term in sender_name for term in search_terms):
                     filtered_emails.append(email)
+        
+        # If no results found, try extended search
+        if not filtered_emails and len(search_terms) == 1:
+            primary_term = search_terms[0]
+            
+            # First try broader search in all available emails (longer time range)
+            extended_emails, extended_note = get_emails_from_folder(
+                search_term=None,
+                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
+                folder_name=folder_name
+            )
+            
+            for email in extended_emails:
+                sender_name = email.get('sender', '').strip().lower()
+                sender_email = email.get('sender_email', '').strip().lower()
+                
+                if (primary_term in sender_name or primary_term in sender_email):
+                    filtered_emails.append(email)
+                    note += f" (extended search in last {min(90, days * 4)} days)"
+                    break  # Only add the extended note once
+        
+        # Update email cache with filtered results for MCP tool compatibility
+        email_cache.clear()
+        for email in filtered_emails:
+            email_cache[email['id']] = email
         
         return filtered_emails, note
     
