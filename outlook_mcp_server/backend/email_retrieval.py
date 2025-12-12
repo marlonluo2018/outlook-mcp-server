@@ -9,7 +9,8 @@ def get_emails_from_folder(
     search_term: Optional[str] = None,
     days: Optional[int] = None,
     folder_name: Optional[str] = None,
-    match_all: bool = True
+    match_all: bool = True,
+    sender_filter_only: bool = False
 ) -> tuple[List[Dict], str]:
     """Retrieve emails from specified folder with batch processing and timeout
     
@@ -66,28 +67,39 @@ def get_emails_from_folder(
                     
                     # For each search term, create filters for different fields
                     for term in search_terms:
-                        # Add subject filter
-                        subject_filter = f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
-                        filter_parts.append(subject_filter)
-                        
-                        # Add sender filter
-                        sender_filter = f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
-                        filter_parts.append(sender_filter)
-                        
-                        # Add body filter (can be slow for large mailboxes)
-                        body_filter = f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
-                        filter_parts.append(body_filter)
+                        if sender_filter_only:
+                            # Only search sender field for sender-only filtering
+                            sender_filter = f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
+                            filter_parts.append(sender_filter)
+                        else:
+                            # Search multiple fields (subject, sender, body)
+                            # Add subject filter
+                            subject_filter = f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
+                            filter_parts.append(subject_filter)
+                            
+                            # Add sender filter
+                            sender_filter = f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
+                            filter_parts.append(sender_filter)
+                            
+                            # Add body filter (can be slow for large mailboxes)
+                            body_filter = f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
+                            filter_parts.append(body_filter)
                     
                     # Combine filters based on match_all parameter
                     if match_all and len(search_terms) > 1:
                         # For AND logic, group by term first, then combine with AND
                         term_groups = []
                         for term in search_terms:
-                            term_filters = [
-                                f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'",
-                                f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'",
-                                f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
-                            ]
+                            if sender_filter_only:
+                                term_filters = [
+                                    f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
+                                ]
+                            else:
+                                term_filters = [
+                                    f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'",
+                                    f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'",
+                                    f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
+                                ]
                             term_groups.append(f"({' OR '.join(term_filters)})")
                         
                         filter_str = f"@SQL={' AND '.join(term_groups)}"
@@ -586,63 +598,33 @@ def search_email_by_from(
     Returns:
         Tuple of (email list, note string)
     """
-    # Get all emails from the specified folder and time period
+    # Use server-side filtering for sender name search
     emails, note = get_emails_from_folder(
-        search_term=None,  # Don't filter by subject
+        search_term=search_term,  # Use server-side filtering
         days=days,
-        folder_name=folder_name
+        folder_name=folder_name,
+        match_all=match_all,
+        sender_filter_only=True  # Add this parameter to indicate sender-only filtering
     )
     
-    # Filter by sender name
-    if search_term:
-        # Clean and parse search terms
-        search_term_clean = search_term.strip().lower()
-        search_terms = search_term_clean.split()
-        filtered_emails = []
-        
-        # Handle edge case where search term becomes empty after cleaning
-        if not search_terms or not search_terms[0]:
-            search_terms = [search_term_clean]
-        
-        # Primary search: exact substring matching
-        for email in emails:
-            sender_name = email.get('sender', '').strip().lower()
-            
-            if match_all:
-                # AND logic: ALL search terms must be found in sender name
-                if all(term in sender_name for term in search_terms):
-                    filtered_emails.append(email)
-            else:
-                # OR logic: ANY search term can match
-                if any(term in sender_name for term in search_terms):
-                    filtered_emails.append(email)
-        
-        # If no results found, try extended search
-        if not filtered_emails and len(search_terms) == 1:
+    # If no results found with server-side filtering, try extended search
+    if not emails and search_term:
+        search_terms = search_term.lower().split()
+        if len(search_terms) == 1:
             primary_term = search_terms[0]
             
-            # First try broader search in all available emails (longer time range)
+            # Try broader search in longer time range
             extended_emails, extended_note = get_emails_from_folder(
-                search_term=None,
+                search_term=search_term,
                 days=min(90, days * 4),  # Try up to 90 days or 4x current search range
-                folder_name=folder_name
+                folder_name=folder_name,
+                match_all=match_all,
+                sender_filter_only=True
             )
             
-            for email in extended_emails:
-                sender_name = email.get('sender', '').strip().lower()
-                sender_email = email.get('sender_email', '').strip().lower()
-                
-                if (primary_term in sender_name or primary_term in sender_email):
-                    filtered_emails.append(email)
-                    note += f" (extended search in last {min(90, days * 4)} days)"
-                    break  # Only add the extended note once
-        
-        # Update email cache with filtered results for MCP tool compatibility
-        email_cache.clear()
-        for email in filtered_emails:
-            email_cache[email['id']] = email
-        
-        return filtered_emails, note
+            if extended_emails:
+                note += f" (extended search in last {min(90, days * 4)} days)"
+                return extended_emails, note
     
     return emails, note
 

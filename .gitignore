@@ -24,3 +24,6 @@ outlook_mcp_server/backend/__pycache__/shared.cpython-311.pyc
 outlook_mcp_server/backend/__pycache__/batch_operations.cpython-311.pyc
 .gitignore
 __pycache__/cli_interface.cpython-311.pyc
+outlook_mcp_server/__pycache__/__main__.cpython-311.pyc
+.gitignore
+.gitignore

@@ -711,10 +711,10 @@ All search functions use the `match_all` parameter to control matching behavior:
   - OR: Combines all field filters with OR
 
 #### 2. From Search (`search_email_by_sender_name_tool`)
-- **Search Method**: Post-retrieval filtering
-- **Search Fields**: Sender display names only
+- **Search Method**: Server-side filtering using Outlook DASL syntax
+- **Search Fields**: Sender display names only (`urn:schemas:httpmail:fromname`)
 - **Important**: Searches display names (e.g., "John Smith"), NOT email addresses (e.g., "john.smith@company.com")
-- **Matching**: Simple case-insensitive substring search
+- **Performance**: Optimized server-side filtering prevents timeout issues for large mailboxes
 - **Enhanced Name Extraction**: Improved handling of Outlook's sender name formatting variations, including names with brackets, slashes, and special characters
 - **Formatting Resilience**: Automatically cleans sender names by removing bracketed content, splitting complex formats, and normalizing spacing for more accurate matching
 
@@ -1117,6 +1117,7 @@ Error: 'gbk' codec can't encode character '\xdf' in position 1084: illegal multi
 - **Fixed Search AND/OR Logic**: Properly implemented match_all parameter with multi-term search support
 - **Search Result Pagination**: Added format_search_results function with consistent pagination and formatting
 - **MCP Tool Cache Fix**: Resolved issue where search results showed cached emails instead of filtered results
+- **Performance Optimization**: Implemented server-side filtering for sender search to eliminate timeout issues in large mailboxes
 
 ### v1.2.0
 - **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results
