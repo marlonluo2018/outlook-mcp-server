@@ -538,13 +538,21 @@ def search_email_by_from(
     
     # Filter by sender name
     if search_term:
-        search_lower = search_term.lower()
+        # Parse search terms for filtering
+        search_terms = search_term.lower().split()
         filtered_emails = []
         
         for email in emails:
             sender_name = email.get('sender', '').lower()
-            if search_lower in sender_name:
-                filtered_emails.append(email)
+            
+            if match_all:
+                # AND logic: ALL search terms must be found in sender name
+                if all(term in sender_name for term in search_terms):
+                    filtered_emails.append(email)
+            else:
+                # OR logic: ANY search term can match
+                if any(term in sender_name for term in search_terms):
+                    filtered_emails.append(email)
         
         return filtered_emails, note
     
@@ -577,17 +585,23 @@ def search_email_by_to(
     
     # Filter by recipient name
     if search_term:
-        search_lower = search_term.lower()
+        # Parse search terms for filtering
+        search_terms = search_term.lower().split()
         filtered_emails = []
         
         for email in emails:
             # Check TO recipients
             to_recipients = email.get('to_recipients', [])
-            for recipient in to_recipients:
-                recipient_name = recipient.get('name', '').lower()
-                if search_lower in recipient_name:
+            recipient_names = [recipient.get('name', '').lower() for recipient in to_recipients]
+            
+            if match_all:
+                # AND logic: ALL search terms must be found in any recipient name
+                if all(any(term in name for name in recipient_names) for term in search_terms):
                     filtered_emails.append(email)
-                    break  # Found match, no need to check other recipients
+            else:
+                # OR logic: ANY search term can match any recipient name
+                if any(any(term in name for name in recipient_names) for term in search_terms):
+                    filtered_emails.append(email)
         
         return filtered_emails, note
     
