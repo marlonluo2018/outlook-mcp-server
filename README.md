@@ -683,6 +683,21 @@ All search functions use the `match_all` parameter to control matching behavior:
 2. **Case Insensitive**: All matching performed in lowercase
 3. **Multi-term Support**: Multiple search terms processed efficiently
 
+#### Extended Search Technology
+
+**Automatic Fallback Search**: When no results are found with the initial search parameters, the system automatically performs an extended search:
+
+- **Trigger**: Activates when zero results are returned from the primary search
+- **Scope Expansion**: Searches up to 90 days or 4x the original search timeframe
+- **Multi-term Handling**: Extended search only applies to single-term searches to maintain performance
+- **Automatic Notification**: Results include a note indicating when extended search was used
+- **Use Case**: Helps find emails from older dates that might be outside the default search window
+
+**Example Scenario**:
+- Primary search: 7 days, single term "Venkatapraveen" → No results
+- Extended search: 28 days (4x 7) → Email found from 15 days ago
+- Result: "Found 1 matching emails (extended search in last 28 days)"
+
 ### Field-Specific Search Behavior
 
 #### 1. Subject Search (`search_email_by_subject_tool`)
@@ -700,6 +715,8 @@ All search functions use the `match_all` parameter to control matching behavior:
 - **Search Fields**: Sender display names only
 - **Important**: Searches display names (e.g., "John Smith"), NOT email addresses (e.g., "john.smith@company.com")
 - **Matching**: Simple case-insensitive substring search
+- **Enhanced Name Extraction**: Improved handling of Outlook's sender name formatting variations, including names with brackets, slashes, and special characters
+- **Formatting Resilience**: Automatically cleans sender names by removing bracketed content, splitting complex formats, and normalizing spacing for more accurate matching
 
 #### 3. To Search (`search_email_by_recipient_name_tool`)
 - **Search Method**: Post-retrieval filtering
@@ -879,6 +896,34 @@ All search functions support nested folder paths:
     "match_all": true
   }
 }
+```
+
+#### Search Result Pagination and Formatting
+
+All search functions provide organized results with pagination support:
+
+- **Page Size**: Each page displays 5 emails by default
+- **Result Count**: Shows total number of matching emails
+- **Extended Search Notice**: Automatically indicates when extended search was used
+- **Navigation Help**: Provides instructions for viewing additional pages
+- **Consistent Formatting**: Same format across all search types
+
+**Example Result Format**:
+```
+Found 15 matching emails
+
+Showing emails 1-5 of 15 (Page 1/3):
+
+Email #1
+Subject: Project Update Meeting Notes
+From: John Doe
+To: Team Members
+Received: 2024-12-10 14:30:00
+Read Status: Read
+Has Attachments: Yes
+
+Use search_email_by_sender_name_tool(search_term='John Doe', days=14, page=2) to view next page.
+Call get_email_details_tool() to get full content of the email.
 ```
 
 #### 7. View Email Cache
@@ -1066,6 +1111,12 @@ Error: 'gbk' codec can't encode character '\xdf' in position 1084: illegal multi
 - **Multi-Encoding Support**: Added support for UTF-8, GBK, GB2312, ISO-8859-1, and CP1252 encodings
 - **ASCII Fallback**: Implemented ASCII-safe content conversion to prevent COM object errors
 - **Improved User Experience**: Replaced cryptic encoding errors with user-friendly fallback messages
+- **Enhanced Search Logic**: Fixed critical search logic flaws in email search functions
+- **Extended Search Technology**: Added automatic fallback search that expands search timeframe when no results found
+- **Improved Sender Name Extraction**: Enhanced handling of Outlook's sender name formatting variations
+- **Fixed Search AND/OR Logic**: Properly implemented match_all parameter with multi-term search support
+- **Search Result Pagination**: Added format_search_results function with consistent pagination and formatting
+- **MCP Tool Cache Fix**: Resolved issue where search results showed cached emails instead of filtered results
 
 ### v1.2.0
 - **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results
