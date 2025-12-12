@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from .outlook_session import OutlookSessionManager
 from .shared import email_cache
@@ -6,10 +6,17 @@ from .shared import email_cache
 def reply_to_email_by_number(
     email_number: int,
     reply_text: str,
-    to_recipients: Optional[List[str]] = None,
-    cc_recipients: Optional[List[str]] = None
+    to_recipients: Optional[Union[str, List[str]]] = None,
+    cc_recipients: Optional[Union[str, List[str]]] = None
 ) -> str:
-    """Reply to an email with custom recipients if provided"""
+    """Reply to an email with custom recipients if provided
+    
+    Args:
+        email_number: Email's position in the last listing
+        reply_text: Text to prepend to the reply
+        to_recipients: Either a single email string OR a list of email strings (None preserves original recipients)
+        cc_recipients: Either a single email string OR a list of email strings (None preserves original recipients)
+    """
     # Input validation
     if not isinstance(email_number, int) or email_number < 1:
         raise ValueError("Email number must be a positive integer")
@@ -17,15 +24,25 @@ def reply_to_email_by_number(
     if not reply_text or not isinstance(reply_text, str):
         raise ValueError("Reply text must be a non-empty string")
     
+    # Handle string to list conversion for recipient parameters
+    if to_recipients is not None and not isinstance(to_recipients, list):
+        if isinstance(to_recipients, str):
+            to_recipients = [to_recipients]
+        else:
+            raise ValueError("To recipients must be a string or list of strings")
+    
+    if cc_recipients is not None and not isinstance(cc_recipients, list):
+        if isinstance(cc_recipients, str):
+            cc_recipients = [cc_recipients]
+        else:
+            raise ValueError("CC recipients must be a string or list of strings")
+    
+    # Validate recipient lists
     if to_recipients is not None:
-        if not isinstance(to_recipients, list):
-            raise ValueError("To recipients must be a list or None")
         if not all(isinstance(email, str) and email.strip() for email in to_recipients):
             raise ValueError("All To email addresses must be non-empty strings")
     
     if cc_recipients is not None:
-        if not isinstance(cc_recipients, list):
-            raise ValueError("CC recipients must be a list or None")
         if not all(isinstance(email, str) and email.strip() for email in cc_recipients):
             raise ValueError("All CC email addresses must be non-empty strings")
     

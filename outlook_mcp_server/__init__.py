@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from fastmcp import FastMCP
 from .backend.outlook_session import OutlookSessionManager
 from .backend.email_retrieval import (
@@ -335,8 +335,8 @@ Body:
 def reply_to_email_by_number_tool(
     email_number: int,
     reply_text: str,
-    to_recipients: Optional[List[str]] = None,
-    cc_recipients: Optional[List[str]] = None
+    to_recipients: Optional[Union[str, List[str]]] = None,
+    cc_recipients: Optional[Union[str, List[str]]] = None
 ) -> dict:
     """
     IMPORTANT: You MUST get explicit user confirmation before calling this tool.
@@ -347,8 +347,10 @@ def reply_to_email_by_number_tool(
     Args:
         email_number: Email's position in the last listing
         reply_text: Text to prepend to the reply
-        to_recipients: Optional list of "To" emails (None preserves original recipients)
-        cc_recipients: Optional list of "CC" emails (None preserves original recipients)
+        to_recipients: Either a single email string OR a list of email strings (None preserves original recipients)
+                      Examples: "user@company.com" OR ["user@company.com", "boss@company.com"]
+        cc_recipients: Either a single email string OR a list of email strings (None preserves original recipients)
+                      Examples: "user@company.com" OR ["user@company.com", "boss@company.com"]
         
     Behavior:
         - When both to_recipients and cc_recipients are None:
@@ -356,6 +358,7 @@ def reply_to_email_by_number_tool(
         - When either parameter is provided:
           * Uses Reply() with specified recipients
           * Any None parameters will result in empty recipient fields
+        - Single email strings and lists of email strings are both accepted
 
     Returns:
         dict: Response containing confirmation message
@@ -368,10 +371,18 @@ def reply_to_email_by_number_tool(
         raise ValueError("Email number must be a positive integer")
     if not reply_text or not isinstance(reply_text, str):
         raise ValueError("Reply text must be a non-empty string")
+    
+    # Handle single email string to list conversion
     if to_recipients is not None and not isinstance(to_recipients, list):
-        raise ValueError("To recipients must be a list or None")
+        if isinstance(to_recipients, str):
+            to_recipients = [to_recipients]
+        else:
+            raise ValueError("To recipients must be a string or list of strings")
     if cc_recipients is not None and not isinstance(cc_recipients, list):
-        raise ValueError("CC recipients must be a list or None")
+        if isinstance(cc_recipients, str):
+            cc_recipients = [cc_recipients]
+        else:
+            raise ValueError("CC recipients must be a string or list of strings")
     result = reply_to_email_by_number(email_number, reply_text, to_recipients, cc_recipients)
     return {
         "type": "text",

@@ -958,11 +958,12 @@ Call get_email_details_tool() to get full content of the email.
   "parameters": {
     "email_number": 5,
     "reply_text": "Thank you for your message...",
-    "to_recipients": ["custom@example.com"],
-    "cc_recipients": ["boss@example.com"]
+    "to_recipients": ["custom@example.com"],  // Can also be single string
+    "cc_recipients": ["boss@example.com"]     // Can also be single string
   }
 }
 // ⚠️ Requires explicit user confirmation
+// Note: to_recipients and cc_recipients can accept either a single email string or a list of email strings
 ```
 
 #### 10. Compose New Email
