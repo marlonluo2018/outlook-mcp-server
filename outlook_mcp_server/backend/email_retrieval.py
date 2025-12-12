@@ -10,7 +10,10 @@ def get_emails_from_folder(
     days: Optional[int] = None,
     folder_name: Optional[str] = None,
     match_all: bool = True,
-    sender_filter_only: bool = False
+    sender_filter_only: bool = False,
+    recipient_filter_only: bool = False,
+    subject_filter_only: bool = False,
+    body_filter_only: bool = False
 ) -> tuple[List[Dict], str]:
     """Retrieve emails from specified folder with batch processing and timeout
     
@@ -20,6 +23,10 @@ def get_emails_from_folder(
         folder_name: Optional folder name (defaults to Inbox)
         match_all: If True (default), all search terms must match (AND logic)
                   If False, any search term can match (OR logic)
+        sender_filter_only: If True, only search sender field
+        recipient_filter_only: If True, only search recipient field
+        subject_filter_only: If True, only search subject field
+        body_filter_only: If True, only search body field
     Returns:
         Tuple of (email list, limit note string)
     """
@@ -71,6 +78,18 @@ def get_emails_from_folder(
                             # Only search sender field for sender-only filtering
                             sender_filter = f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
                             filter_parts.append(sender_filter)
+                        elif recipient_filter_only:
+                            # Only search recipient field for recipient-only filtering
+                            recipient_filter = f"\"urn:schemas:httpmail:displayto\" LIKE '%{term}%'"
+                            filter_parts.append(recipient_filter)
+                        elif subject_filter_only:
+                            # Only search subject field for subject-only filtering
+                            subject_filter = f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
+                            filter_parts.append(subject_filter)
+                        elif body_filter_only:
+                            # Only search body field for body-only filtering
+                            body_filter = f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
+                            filter_parts.append(body_filter)
                         else:
                             # Search multiple fields (subject, sender, body)
                             # Add subject filter
@@ -93,6 +112,18 @@ def get_emails_from_folder(
                             if sender_filter_only:
                                 term_filters = [
                                     f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
+                                ]
+                            elif recipient_filter_only:
+                                term_filters = [
+                                    f"\"urn:schemas:httpmail:displayto\" LIKE '%{term}%'"
+                                ]
+                            elif subject_filter_only:
+                                term_filters = [
+                                    f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
+                                ]
+                            elif body_filter_only:
+                                term_filters = [
+                                    f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
                                 ]
                             else:
                                 term_filters = [
@@ -573,12 +604,35 @@ def search_email_by_subject(
     Returns:
         Tuple of (email list, note string)
     """
-    return get_emails_from_folder(
-        search_term=search_term,
+    # Use server-side filtering for subject-only search
+    emails, note = get_emails_from_folder(
+        search_term=search_term,  # Use server-side filtering
         days=days,
         folder_name=folder_name,
-        match_all=match_all
+        match_all=match_all,
+        subject_filter_only=True  # Add this parameter to indicate subject-only filtering
     )
+    
+    # If no results found with server-side filtering, try extended search
+    if not emails and search_term:
+        search_terms = search_term.lower().split()
+        if len(search_terms) == 1:
+            primary_term = search_terms[0]
+            
+            # Try broader search in longer time range
+            extended_emails, extended_note = get_emails_from_folder(
+                search_term=search_term,
+                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
+                folder_name=folder_name,
+                match_all=match_all,
+                subject_filter_only=True
+            )
+            
+            if extended_emails:
+                note += f" (extended search in last {min(90, days * 4)} days)"
+                return extended_emails, note
+    
+    return emails, note
 
 def search_email_by_from(
     search_term: str,
@@ -646,34 +700,33 @@ def search_email_by_to(
     Returns:
         Tuple of (email list, note string)
     """
-    # Get all emails from the specified folder and time period
+    # Use server-side filtering for recipient name search
     emails, note = get_emails_from_folder(
-        search_term=None,  # Don't filter by subject
+        search_term=search_term,  # Use server-side filtering
         days=days,
-        folder_name=folder_name
+        folder_name=folder_name,
+        match_all=match_all,
+        recipient_filter_only=True  # Add this parameter to indicate recipient-only filtering
     )
     
-    # Filter by recipient name
-    if search_term:
-        # Parse search terms for filtering
+    # If no results found with server-side filtering, try extended search
+    if not emails and search_term:
         search_terms = search_term.lower().split()
-        filtered_emails = []
-        
-        for email in emails:
-            # Check TO recipients
-            to_recipients = email.get('to_recipients', [])
-            recipient_names = [recipient.get('name', '').lower() for recipient in to_recipients]
+        if len(search_terms) == 1:
+            primary_term = search_terms[0]
             
-            if match_all:
-                # AND logic: ALL search terms must be found in any recipient name
-                if all(any(term in name for name in recipient_names) for term in search_terms):
-                    filtered_emails.append(email)
-            else:
-                # OR logic: ANY search term can match any recipient name
-                if any(any(term in name for name in recipient_names) for term in search_terms):
-                    filtered_emails.append(email)
-        
-        return filtered_emails, note
+            # Try broader search in longer time range
+            extended_emails, extended_note = get_emails_from_folder(
+                search_term=search_term,
+                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
+                folder_name=folder_name,
+                match_all=match_all,
+                recipient_filter_only=True
+            )
+            
+            if extended_emails:
+                note += f" (extended search in last {min(90, days * 4)} days)"
+                return extended_emails, note
     
     return emails, note
 
@@ -685,6 +738,8 @@ def search_email_by_body(
 ) -> tuple[List[Dict], str]:
     """Search emails by body content and return list of emails with note
     
+    Uses server-side filtering for optimal performance.
+    
     Args:
         search_term: Search term to match in email body
         days: Number of days to look back (default: 7)
@@ -695,117 +750,32 @@ def search_email_by_body(
     Returns:
         Tuple of (email list, note string)
     """
-    # Get all emails from the specified folder and time period (without subject filtering)
+    # Use server-side filtering for body content search
     emails, note = get_emails_from_folder(
-        search_term=None,  # Don't filter by subject
+        search_term=search_term,  # Use server-side filtering
         days=days,
-        folder_name=folder_name
+        folder_name=folder_name,
+        match_all=match_all,
+        body_filter_only=True  # Add this parameter to indicate body-only filtering
     )
     
-    # Filter by body content
-    if search_term:
-        # Check if search term is enclosed in quotes (exact phrase search)
-        is_exact_phrase = (search_term.startswith('"') and search_term.endswith('"')) or \
-                          (search_term.startswith("'") and search_term.endswith("'"))
-        
-        if is_exact_phrase:
-            # Remove quotes and search for exact phrase
-            search_phrase = search_term[1:-1].lower()
-            filtered_emails = []
+    # If no results found with server-side filtering, try extended search
+    if not emails and search_term:
+        search_terms = search_term.lower().split()
+        if len(search_terms) == 1:
+            primary_term = search_terms[0]
             
-            with OutlookSessionManager() as session:
-                pythoncom.CoInitialize()
-                try:
-                    for email in emails:
-                        try:
-                            # Get the full email item to access the body
-                            item = session.namespace.GetItemFromID(email['id'])
-                            if item.Class != 43:  # Skip non-mail items
-                                continue
-                                
-                            body_text = getattr(item, 'Body', '').lower()
-                            
-                            # Check if the exact phrase is found in the body
-                            if search_phrase in body_text:
-                                filtered_emails.append(email)
-                        except Exception as e:
-                            # Skip problematic emails
-                            continue
-                finally:
-                    pythoncom.CoUninitialize()
-        else:
-            # Original logic for word-based search
-            search_terms = search_term.lower().split()
-            filtered_emails = []
+            # Try broader search in longer time range
+            extended_emails, extended_note = get_emails_from_folder(
+                search_term=search_term,
+                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
+                folder_name=folder_name,
+                match_all=match_all,
+                body_filter_only=True
+            )
             
-            with OutlookSessionManager() as session:
-                pythoncom.CoInitialize()
-                try:
-                    for email in emails:
-                        try:
-                            # Get the full email item to access the body
-                            item = session.namespace.GetItemFromID(email['id'])
-                            if item.Class != 43:  # Skip non-mail items
-                                continue
-                                
-                            body_text = getattr(item, 'Body', '').lower()
-                            
-                            # Check if all terms match (AND logic) or any term matches (OR logic)
-                            if match_all:
-                                # All terms must be found in the body
-                                if all(term in body_text for term in search_terms):
-                                    # Additional check: ensure terms appear close to each other
-                                    # This helps filter out emails where terms are scattered throughout
-                                    if _are_terms_close(body_text, search_terms):
-                                        filtered_emails.append(email)
-                            else:
-                                # Any term can be found in the body
-                                if any(term in body_text for term in search_terms):
-                                    filtered_emails.append(email)
-                        except Exception as e:
-                            # Skip problematic emails
-                            continue
-                finally:
-                    pythoncom.CoUninitialize()
-        
-        # Update the email cache with only the filtered emails
-        email_cache.clear()
-        for email in filtered_emails:
-            # Get full email details including body for the cache
-            try:
-                with OutlookSessionManager() as session:
-                    pythoncom.CoInitialize()
-                    try:
-                        item = session.namespace.GetItemFromID(email['id'])
-                        if item.Class == 43:  # Only process mail items
-                            full_email = _process_email_item(item)
-                            if full_email:
-                                email_cache[email['id']] = full_email
-                    finally:
-                        pythoncom.CoUninitialize()
-            except Exception:
-                # If we can't get full details, use the basic email data
-                email_cache[email['id']] = email
-        
-        return filtered_emails, note
-    
-    # If no search term provided, return all emails and update cache
-    email_cache.clear()
-    for email in emails:
-        # Get full email details including body for the cache
-        try:
-            with OutlookSessionManager() as session:
-                pythoncom.CoInitialize()
-                try:
-                    item = session.namespace.GetItemFromID(email['id'])
-                    if item.Class == 43:  # Only process mail items
-                        full_email = _process_email_item(item)
-                        if full_email:
-                            email_cache[email['id']] = full_email
-                finally:
-                    pythoncom.CoUninitialize()
-        except Exception:
-            # If we can't get full details, use the basic email data
-            email_cache[email['id']] = email
+            if extended_emails:
+                note += f" (extended search in last {min(90, days * 4)} days)"
+                return extended_emails, note
     
     return emails, note

@@ -719,10 +719,11 @@ All search functions use the `match_all` parameter to control matching behavior:
 - **Formatting Resilience**: Automatically cleans sender names by removing bracketed content, splitting complex formats, and normalizing spacing for more accurate matching
 
 #### 3. To Search (`search_email_by_recipient_name_tool`)
-- **Search Method**: Post-retrieval filtering
-- **Search Fields**: Recipient display names in TO and CC fields
+- **Search Method**: Server-side filtering using Outlook DASL syntax
+- **Search Fields**: Recipient display names in TO and CC fields (`urn:schemas:httpmail:displayto`)
 - **Important**: Searches display names only, NOT email addresses
-- **Optimization**: Stops checking additional recipients once match found
+- **Performance**: Optimized server-side filtering prevents timeout issues for large mailboxes
+- **Enhanced Name Extraction**: Improved handling of Outlook's recipient name formatting variations, including names with brackets, slashes, and special characters
 
 #### 4. Body Search (`search_email_by_body_tool`)
 - **Search Method**: Full email retrieval with advanced text analysis
@@ -1118,6 +1119,7 @@ Error: 'gbk' codec can't encode character '\xdf' in position 1084: illegal multi
 - **Search Result Pagination**: Added format_search_results function with consistent pagination and formatting
 - **MCP Tool Cache Fix**: Resolved issue where search results showed cached emails instead of filtered results
 - **Performance Optimization**: Implemented server-side filtering for sender search to eliminate timeout issues in large mailboxes
+- **Recipient Search Optimization**: Enhanced recipient search with server-side filtering for improved performance and extended search capabilities
 
 ### v1.2.0
 - **Enhanced Search Logic**: Added intelligent word proximity checking for more accurate search results
