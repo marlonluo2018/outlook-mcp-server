@@ -1,9 +1,87 @@
+﻿"""Email retrieval functions with consolidated search and improved error handling"""
 from datetime import datetime, timedelta, timezone
 import time
-import pythoncom
-from typing import List, Dict, Optional
+import logging
+from typing import List, Dict, Optional, Tuple
+
 from .outlook_session import OutlookSessionManager
 from .shared import MAX_DAYS, MAX_EMAILS, MAX_LOAD_TIME, email_cache
+from .utils import OutlookItemClass, build_dasl_filter, get_pagination_info, safe_encode_text
+from .validators import EmailSearchParams, EmailListParams, PaginationParams
+
+logger = logging.getLogger(__name__)
+
+
+def _unified_search(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True,
+    search_field: str = "subject"
+) -> Tuple[List[Dict], str]:
+    """Unified search function with field-specific filtering.
+    
+    Args:
+        search_term: Search term to match
+        days: Number of days to look back
+        folder_name: Optional folder name
+        match_all: If True, all terms must match (AND); if False, any term matches (OR)
+        search_field: Which field to filter ('subject', 'sender', 'recipient', 'body')
+        
+    Returns:
+        Tuple of (email list, note string)
+    """
+    # Validate using Pydantic
+    try:
+        params = EmailSearchParams(
+            search_term=search_term,
+            days=days,
+            folder_name=folder_name,
+            match_all=match_all
+        )
+    except Exception as e:
+        logger.error(f"Validation error in _unified_search: {e}")
+        raise ValueError(f"Invalid search parameters: {e}")
+    
+    # Map search field to filter parameter
+    field_filters = {
+        "subject": {"subject_filter_only": True},
+        "sender": {"sender_filter_only": True},
+        "recipient": {"recipient_filter_only": True},
+        "body": {"body_filter_only": True}
+    }
+    
+    filter_kwargs = field_filters.get(search_field, {"subject_filter_only": True})
+    
+    emails, note = get_emails_from_folder(
+        search_term=params.search_term,
+        days=params.days,
+        folder_name=params.folder_name,
+        match_all=params.match_all,
+        **filter_kwargs
+    )
+    
+    # If no results found with server-side filtering, try extended search
+    if not emails and search_term:
+        search_terms = search_term.lower().split()
+        if len(search_terms) == 1:
+            extended_days = min(90, days * 4)
+            logger.info(f"No results found, trying extended search for {extended_days} days")
+            
+            extended_emails, extended_note = get_emails_from_folder(
+                search_term=search_term,
+                days=extended_days,
+                folder_name=folder_name,
+                match_all=match_all,
+                **filter_kwargs
+            )
+            
+            if extended_emails:
+                note += f" (extended search in last {extended_days} days)"
+                return extended_emails, note
+    
+    return emails, note
+
 
 def get_emails_from_folder(
     search_term: Optional[str] = None,
@@ -14,19 +92,19 @@ def get_emails_from_folder(
     recipient_filter_only: bool = False,
     subject_filter_only: bool = False,
     body_filter_only: bool = False
-) -> tuple[List[Dict], str]:
-    """Retrieve emails from specified folder with batch processing and timeout
+) -> Tuple[List[Dict], str]:
+    """Retrieve emails from specified folder with batch processing and timeout.
     
     Args:
         search_term: Optional search term to filter emails
         days: Optional number of days to look back
         folder_name: Optional folder name (defaults to Inbox)
         match_all: If True (default), all search terms must match (AND logic)
-                  If False, any search term can match (OR logic)
         sender_filter_only: If True, only search sender field
         recipient_filter_only: If True, only search recipient field
         subject_filter_only: If True, only search subject field
         body_filter_only: If True, only search body field
+        
     Returns:
         Tuple of (email list, limit note string)
     """
@@ -37,387 +115,237 @@ def get_emails_from_folder(
     start_time = time.time()
     retry_count = 0
     limit_note = ""
+    failed_count = 0
     
     with OutlookSessionManager() as session:
-      
-        
-        while retry_count < 3:  # MAX_RETRIES from shared.py
+        while retry_count < 3:
             try:
                 # Check timeout
                 if time.time() - start_time > MAX_LOAD_TIME:
                     limit_note = " (MAX_LOAD_TIME reached)"
+                    logger.warning(f"MAX_LOAD_TIME reached after processing {len(emails)} emails")
                     break
                     
                 folder = session.get_folder(folder_name)
                 if not folder:
-
+                    logger.error(f"Folder not found: {folder_name}")
                     return [], " (Folder not found)"
                 
-
-                    
                 folder_items = folder.Items
 
-                # Get date threshold first to use in Restrict filter
+                # Get date threshold
                 days_to_use = min(days or MAX_DAYS, MAX_DAYS)
                 now = datetime.now()
-                # Make threshold_date timezone-aware to match received_datetime
                 threshold_date = now.replace(tzinfo=timezone.utc) - timedelta(days=days_to_use)
                 
-                # Parse search terms for filtering
-                search_terms = search_term.lower().split() if search_term else None
-                
-                # Use Outlook's built-in search functionality if search term is provided
+                # Build optimized DASL filter if search term is provided
                 if search_term:
-                    # Create a more sophisticated search filter that searches multiple fields
-                    # Using Outlook's DASL syntax for better search capabilities
-                    filter_parts = []
+                    search_terms = search_term.lower().split()
                     
-                    # For each search term, create filters for different fields
-                    for term in search_terms:
-                        if sender_filter_only:
-                            # Only search sender field for sender-only filtering
-                            sender_filter = f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
-                            filter_parts.append(sender_filter)
-                        elif recipient_filter_only:
-                            # Only search recipient field for recipient-only filtering
-                            recipient_filter = f"\"urn:schemas:httpmail:displayto\" LIKE '%{term}%'"
-                            filter_parts.append(recipient_filter)
-                        elif subject_filter_only:
-                            # Only search subject field for subject-only filtering
-                            subject_filter = f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
-                            filter_parts.append(subject_filter)
-                        elif body_filter_only:
-                            # Only search body field for body-only filtering
-                            body_filter = f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
-                            filter_parts.append(body_filter)
-                        else:
-                            # Search multiple fields (subject, sender, body)
-                            # Add subject filter
-                            subject_filter = f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
-                            filter_parts.append(subject_filter)
-                            
-                            # Add sender filter
-                            sender_filter = f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
-                            filter_parts.append(sender_filter)
-                            
-                            # Add body filter (can be slow for large mailboxes)
-                            body_filter = f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
-                            filter_parts.append(body_filter)
-                    
-                    # Combine filters based on match_all parameter
-                    if match_all and len(search_terms) > 1:
-                        # For AND logic, group by term first, then combine with AND
-                        term_groups = []
-                        for term in search_terms:
-                            if sender_filter_only:
-                                term_filters = [
-                                    f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'"
-                                ]
-                            elif recipient_filter_only:
-                                term_filters = [
-                                    f"\"urn:schemas:httpmail:displayto\" LIKE '%{term}%'"
-                                ]
-                            elif subject_filter_only:
-                                term_filters = [
-                                    f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'"
-                                ]
-                            elif body_filter_only:
-                                term_filters = [
-                                    f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
-                                ]
-                            else:
-                                term_filters = [
-                                    f"\"urn:schemas:httpmail:subject\" LIKE '%{term}%'",
-                                    f"\"urn:schemas:httpmail:fromname\" LIKE '%{term}%'",
-                                    f"\"urn:schemas:httpmail:textdescription\" LIKE '%{term}%'"
-                                ]
-                            term_groups.append(f"({' OR '.join(term_filters)})")
-                        
-                        filter_str = f"@SQL={' AND '.join(term_groups)}"
+                    # Determine which field to search
+                    if sender_filter_only:
+                        field_filter = 'sender'
+                    elif recipient_filter_only:
+                        field_filter = 'recipient'
+                    elif subject_filter_only:
+                        field_filter = 'subject'
+                    elif body_filter_only:
+                        field_filter = 'body'
                     else:
-                        # For OR logic (default), combine all filters with OR
-                        filter_str = f"@SQL=({' OR '.join(filter_parts)})"
+                        field_filter = 'subject'  # default
                     
-                    # Add date filter to improve performance
-                    date_filter = f"\"urn:schemas:httpmail:datereceived\" >= '{threshold_date.strftime('%Y-%m-%d %H:%M:%S')}'"
-                    filter_str = f"@SQL=({filter_str[5:]}) AND {date_filter}"  # Remove @SQL= and add it back with date filter
-                    
+                    # Build optimized filter using utility function
+                    filter_str = build_dasl_filter(search_terms, threshold_date, field_filter, match_all)
                     folder_items = folder_items.Restrict(filter_str)
-
+                    logger.info(f"Applied DASL filter for {field_filter}: {len(search_terms)} terms")
                 
                 # Sort by received time (newest first)
                 folder_items.Sort("[ReceivedTime]", True)
-
                 
-                # Try to access the first item directly
-                if folder_items.Count > 0:
-                    try:
-                        first_item = folder_items.Item(1)
-                        if hasattr(first_item, 'Subject'):
-                            pass  # Subject exists
-                    except Exception:
-                        pass  # Skip problematic first item
-                
-                    
-                # Process emails from newest to oldest
-                emails = []
+                # Process emails with improved error handling
                 processed_count = 0
                 total_items = folder_items.Count
-                try:
-                    for i in range(1, min(total_items + 1, MAX_EMAILS + 1)):
-                        current_time = time.time()
-                        if current_time - start_time > MAX_LOAD_TIME:
-                            limit_note = f" (MAX_LOAD_TIME reached after {processed_count} emails)"
-                            break
-                        
-                            
-                        if len(emails) >= MAX_EMAILS:
-                            limit_note = f" (MAX_EMAILS={MAX_EMAILS} reached)"
-                            break
-                            
-                        try:
-                            item = folder_items.Item(i)
-                            if item.Class != 43:  # Skip non-mail items
-                                continue
-                                
-                            processed_count += 1
-                            received_time = item.ReceivedTime
-                            
-                            # Convert COM datetime to Python datetime for comparison
-                            # COM dates start from 1899-12-30, Python from 1970-01-01
-                            # We need to handle this conversion properly
-                            try:
-                                # Try to convert COM datetime to Python datetime
-                                if hasattr(received_time, 'year'):
-                                    # It's already a Python datetime
-                                    received_datetime = received_time
-                                else:
-                                    # It's a COM date, convert it
-                                    received_datetime = datetime.strptime(received_time.strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
-                            except:
-                                # If conversion fails, skip this email
-                                continue
-                            
-                            try:
-                                date_comparison = received_datetime >= threshold_date
-                            except Exception as e:
-                                continue
-                            
-                            # Stop if we've gone past the date threshold
-                            if received_datetime < threshold_date:
-                                break
-                                
-                            # Only process if within date range
-                            if received_datetime >= threshold_date:
-                                # Extract and clean sender name from SenderName
-                                raw_sender_name = getattr(item, 'SenderName', 'Unknown Sender')
-                                # Remove common Outlook formatting patterns
-                                sender_name = raw_sender_name.split('/')[0].strip()  # Remove path info
-                                sender_name = sender_name.split('[')[0].strip()  # Remove email addresses in brackets
-                                sender_name = sender_name.split(',')[0].strip()  # Handle "Last, First" format
-                                # Clean up extra whitespace and special characters
-                                sender_name = ' '.join(sender_name.split())  # Normalize whitespace
-                                
-                                
-                                email_data = {
-                                    'id': getattr(item, 'EntryID', ''),
-                                    'subject': getattr(item, 'Subject', 'No Subject'),
-                                    'sender': sender_name,
-                                    'sender_email': getattr(item, 'SenderEmailAddress', ''),
-                                    'received_time': str(received_datetime),
-                                    'unread': getattr(item, 'UnRead', False),
-                                    'to_recipients': [{'name': getattr(item, 'To', '')}],
-                                    'cc_recipients': [{'name': getattr(item, 'CC', '')}]
-                                }
-                                
-                                # Add to results (filtering already done by Restrict)
-                                emails.append(email_data)
-                                email_cache[email_data['id']] = email_data
-                                
-                                
-                        except Exception as e:
-                            continue  # Skip problematic emails
-                finally:
-                    pass
+                logger.info(f"Processing up to {min(total_items, MAX_EMAILS)} emails from {total_items} total")
+                
+                for i in range(1, total_items + 1):
+                    # Check limits
+                    if len(emails) >= MAX_EMAILS:
+                        limit_note = f" (MAX_EMAILS={MAX_EMAILS} reached)"
+                        logger.info(f"Reached MAX_EMAILS limit: {MAX_EMAILS}")
+                        break
                     
+                    if time.time() - start_time > MAX_LOAD_TIME:
+                        limit_note = f" (MAX_LOAD_TIME reached after {processed_count} emails)"
+                        logger.warning(f"MAX_LOAD_TIME reached after {processed_count} emails")
+                        break
+                    
+                    try:
+                        item = folder_items.Item(i)
+                        
+                        # Skip non-mail items
+                        if item.Class != OutlookItemClass.MAIL_ITEM:
+                            continue
+                            
+                        processed_count += 1
+                        received_time = item.ReceivedTime
+                        
+                        # Convert COM datetime to Python datetime
+                        try:
+                            if hasattr(received_time, 'year'):
+                                received_datetime = received_time
+                            else:
+                                received_datetime = datetime.strptime(
+                                    received_time.strftime('%Y-%m-%d %H:%M:%S'),
+                                    '%Y-%m-%d %H:%M:%S'
+                                )
+                        except Exception as date_error:
+                            logger.warning(f"Failed to parse date for email at index {i}: {date_error}")
+                            continue
+                        
+                        # Stop if we've gone past the date threshold
+                        if received_datetime < threshold_date:
+                            logger.debug(f"Reached date threshold at email {i}")
+                            break
+                            
+                        # Extract email data with safe encoding
+                        raw_sender_name = safe_encode_text(
+                            getattr(item, 'SenderName', 'Unknown Sender'),
+                            'sender_name'
+                        )
+                        # Clean sender name
+                        sender_name = raw_sender_name.split('/')[0].strip()
+                        sender_name = sender_name.split('[')[0].strip()
+                        sender_name = sender_name.split(',')[0].strip()
+                        sender_name = ' '.join(sender_name.split())
+                        
+                        email_data = {
+                            'id': getattr(item, 'EntryID', ''),
+                            'subject': safe_encode_text(getattr(item, 'Subject', 'No Subject'), 'subject'),
+                            'sender': sender_name,
+                            'sender_email': safe_encode_text(getattr(item, 'SenderEmailAddress', ''), 'sender_email'),
+                            'received_time': str(received_datetime),
+                            'unread': getattr(item, 'UnRead', False),
+                            'to_recipients': [{'name': safe_encode_text(getattr(item, 'To', ''), 'to_recipients')}],
+                            'cc_recipients': [{'name': safe_encode_text(getattr(item, 'CC', ''), 'cc_recipients')}]
+                        }
+                        
+                        emails.append(email_data)
+                        email_cache[email_data['id']] = email_data
+                        
+                    except Exception as e:
+                        failed_count += 1
+                        logger.warning(f"Failed to process email at index {i}: {type(e).__name__}: {str(e)}")
+                        continue
+                
+                if failed_count > 0:
+                    logger.info(f"Completed with {failed_count} failed emails out of {processed_count} processed")
                 
                 return emails[:MAX_EMAILS], limit_note
                 
             except Exception as e:
                 retry_count += 1
-                if retry_count > 2:
+                logger.error(f"Error in get_emails_from_folder (attempt {retry_count}/3): {e}")
+                if retry_count >= 3:
                     raise RuntimeError(f"Failed after {retry_count} retries: {str(e)}")
-
-
-def _are_terms_close(text: str, terms: List[str], max_distance: int = 50) -> bool:
-    """
-    Check if all terms appear close to each other in the text.
+                time.sleep(1 * retry_count)  # Simple backoff
     
-    Args:
-        text: The text to search in
-        terms: List of terms to search for
-        max_distance: Maximum distance between terms (in characters)
-        
-    Returns:
-        True if all terms appear close to each other, False otherwise
-    """
-    if len(terms) <= 1:
-        return True
-    
-    # Find all positions of each term in the text
-    term_positions = {}
-    for term in terms:
-        positions = []
-        start = 0
-        while True:
-            pos = text.find(term, start)
-            if pos == -1:
-                break
-            positions.append(pos)
-            start = pos + 1
-        term_positions[term] = positions
-    
-    # Check if there's a combination of positions where all terms are close
-    # We'll use a simple approach: check if any term's position is close to any other term's position
-    for i, term1 in enumerate(terms):
-        for term2 in terms[i+1:]:
-            positions1 = term_positions.get(term1, [])
-            positions2 = term_positions.get(term2, [])
-            
-            # Check if any position of term1 is close to any position of term2
-            found_close = False
-            for pos1 in positions1:
-                for pos2 in positions2:
-                    if abs(pos1 - pos2) <= max_distance:
-                        found_close = True
-                        break
-                if found_close:
-                    break
-            
-            if not found_close:
-                return False
-    
-    return True
+    return emails, limit_note
 
-
-def _process_email_item(item) -> Optional[Dict]:
-    """Process a single email item and update cache"""
-    try:
-        if item.Class != 43:  # Skip non-mail items
-            return None
-            
-        
-        email_data = {
-            'id': getattr(item, 'EntryID', ''),
-            'subject': getattr(item, 'Subject', 'No Subject'),
-            'sender': getattr(item, 'SenderName', 'Unknown Sender'),
-            'sender_email': getattr(item, 'SenderEmailAddress', ''),
-            'received_time': str(getattr(item, 'ReceivedTime', '')),
-            'date': str(getattr(item, 'ReceivedTime', '')),  # Backward compat
-            'unread': getattr(item, 'UnRead', False),
-            'has_attachments': getattr(item, 'Attachments', False).Count > 0,
-            'size': getattr(item, 'Size', 0),
-            'body': getattr(item, 'Body', '')[:1000],
-            'to_recipients': [
-                {
-                    'name': getattr(r, 'Name', ''),
-                    'address': getattr(r, 'Address', '').split('/')[-1],
-                    'type': getattr(r, 'Type', 1)  # 1=To, 2=CC
-                }
-                for r in getattr(item, 'Recipients', [])
-                if hasattr(r, 'Address') or hasattr(r, 'Name')
-            ],
-            'cc_recipients': [
-                {
-                    'name': getattr(r, 'Name', ''),
-                    'address': getattr(r, 'Address', '').split('/')[-1],
-                    'type': getattr(r, 'Type', 2)  # 1=To, 2=CC
-                }
-                for r in getattr(item, 'Recipients', [])
-                if hasattr(r, 'Address') or hasattr(r, 'Name')
-            ]
-        }
-        
-        # Update cache
-        if email_data['id']:
-            email_cache[email_data['id']] = email_data
-            
-        return email_data
-            
-    except Exception as e:
-        return None  # Skip problematic emails
 
 def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> str:
-    """Public interface for listing emails (used by CLI)
-    Loads emails into cache and returns count message"""
-    if days is not None and not isinstance(days, int):
-        raise ValueError("Days parameter must be an integer")
-    if days is not None and (days < 1 or days > 30):
-        raise ValueError("Days parameter must be between 1 and 30")
+    """Public interface for listing emails (used by CLI).
+    Loads emails into cache and returns count message.
+    """
+    try:
+        params = EmailListParams(days=days or 7, folder_name=folder_name)
+    except Exception as e:
+        logger.error(f"Validation error in list_recent_emails: {e}")
+        raise ValueError(f"Invalid parameters: {e}")
     
     emails, note = get_emails_from_folder(
-        folder_name=folder_name,
-        days=days)
-    days_str = f" from last {days} days" if days else ""
+        folder_name=params.folder_name,
+        days=params.days
+    )
+    
+    days_str = f" from last {params.days} days" if params.days else ""
+    logger.info(f"Listed {len(emails)} emails{days_str}")
     return f"Found {len(emails)} emails{days_str}. Use 'view_email_cache_tool' to view them.{note}"
 
-def search_emails(
-    query: str,
-    days: Optional[int] = None,
+
+def search_email_by_subject(
+    search_term: str,
+    days: int = 7,
     folder_name: Optional[str] = None,
     match_all: bool = True
-) -> str:
-    """Public interface for searching emails (used by CLI)
-    
-    Args:
-        query: Search term to match in email subjects (colons are allowed as part of regular text)
-        days: Optional number of days to filter by
-        folder_name: Optional folder name to search in
-        match_all: If True (default), all terms must match (AND logic)
-                  If False, any term can match (OR logic)
-    Returns:
-        Formatted string with count and note
-    """
-    if not query or not isinstance(query, str):
-        raise ValueError("Search term must be a non-empty string")
-    
-    if days is not None and not isinstance(days, int):
-        raise ValueError("Days parameter must be an integer")
-    
-    if days is not None and (days < 1 or days > 30):
-        raise ValueError("Days parameter must be between 1 and 30")
-    
-    emails, note = get_emails_from_folder(
-        search_term=query,
-        days=days,
-        folder_name=folder_name,
-        match_all=match_all)
-    days_str = f" from last {days} days" if days else ""
-    return f"Found {len(emails)} matching emails{days_str}. Use 'view_email_cache_tool' to view them.{note}"
+) -> Tuple[List[Dict], str]:
+    """Search emails by subject and return list of emails with note."""
+    return _unified_search(search_term, days, folder_name, match_all, "subject")
+
+
+def search_email_by_from(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> Tuple[List[Dict], str]:
+    """Search emails by sender name and return list of emails with note."""
+    return _unified_search(search_term, days, folder_name, match_all, "sender")
+
+
+def search_email_by_to(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> Tuple[List[Dict], str]:
+    """Search emails by recipient name and return list of emails with note."""
+    return _unified_search(search_term, days, folder_name, match_all, "recipient")
+
+
+def search_email_by_body(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True
+) -> Tuple[List[Dict], str]:
+    """Search emails by body content and return list of emails with note."""
+    return _unified_search(search_term, days, folder_name, match_all, "body")
+
 
 def list_folders() -> List[str]:
-    """List all available mail folders"""
+    """List all available mail folders."""
     with OutlookSessionManager() as session:
         folders = []
-        for folder in session.namespace.Folders:
-            folders.append(folder.Name)
-            for subfolder in folder.Folders:
-                folders.append(f"  {subfolder.Name}")
+        try:
+            for folder in session.namespace.Folders:
+                folders.append(folder.Name)
+                try:
+                    for subfolder in folder.Folders:
+                        folders.append(f"  {subfolder.Name}")
+                except Exception as e:
+                    logger.warning(f"Could not list subfolders for {folder.Name}: {e}")
+        except Exception as e:
+            logger.error(f"Error listing folders: {e}")
+            raise
         return folders
 
+
 def get_email_by_number(email_number: int) -> Optional[Dict]:
-    """Get detailed information for a specific email by its position in cache (1-based index)"""
+    """Get detailed information for a specific email by its position in cache (1-based index)."""
     if not isinstance(email_number, int) or email_number < 1:
+        logger.warning(f"Invalid email number: {email_number}")
         return None
         
     cache_items = list(email_cache.values())
     if email_number > len(cache_items):
+        logger.warning(f"Email number {email_number} out of range (cache size: {len(cache_items)})")
         return None
         
     email = cache_items[email_number - 1]
     
     # Validate cache item is a dictionary
     if not isinstance(email, dict):
+        logger.error(f"Invalid cache item type: {type(email)}. Expected dict.")
         raise ValueError(f"Invalid cache item type: {type(email)}. Expected dict.")
     
     # Create filtered copy without sensitive fields
@@ -454,32 +382,35 @@ def get_email_by_number(email_number: int) -> Optional[Dict]:
     with OutlookSessionManager() as session:
         try:
             item = session.namespace.GetItemFromID(email['id'])
-            if item.Class != 43:  # Skip non-mail items
+            if item.Class != OutlookItemClass.MAIL_ITEM:
+                logger.warning(f"Email {email_number} is not a mail item")
                 return None
                 
             filtered_email.update({
-                'body': getattr(item, 'Body', ''),
+                'body': safe_encode_text(getattr(item, 'Body', ''), 'body'),
                 'attachments': [
                     {
-                        'name': attach.FileName,
+                        'name': safe_encode_text(attach.FileName, 'attachment_name'),
                         'size': attach.Size
                     }
                     for attach in item.Attachments
                 ] if hasattr(item, 'Attachments') else []
             })
             
+            logger.info(f"Retrieved full details for email #{email_number}")
             return filtered_email
             
         except Exception as e:
+            logger.error(f"Error fetching email details for #{email_number}: {e}")
             return None
+
 
 # Keep alias for backward compatibility
 get_email_details = get_email_by_number
 
 
-
 def view_email_cache(page: int = 1, per_page: int = 5) -> str:
-    """View emails from cache with pagination and detailed info
+    """View emails from cache with pagination and detailed info.
     
     Args:
         page: Page number (1-based)
@@ -490,29 +421,30 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
     """
     if not email_cache:
         return "Error: No emails in cache. Please use list_emails or search_emails first."
-    if not isinstance(page, int) or page < 1:
-        return "Error: 'page' must be a positive integer"
-        
-    # Validate cache structure
-    first_email = next(iter(email_cache.values()), None)
+    
+    try:
+        params = PaginationParams(page=page, per_page=per_page)
+    except Exception as e:
+        logger.error(f"Validation error in view_email_cache: {e}")
+        return f"Error: Invalid pagination parameters: {e}"
     
     cache_items = list(email_cache.values())
-    total_emails = len(cache_items)
-    total_pages = (total_emails + per_page - 1) // per_page
+    pagination_info = get_pagination_info(len(cache_items), params.per_page)
+    total_pages = pagination_info['total_pages']
+    total_emails = pagination_info['total_items']
     
-    if page > total_pages:
-        return f"Error: Page {page} does not exist. There are only {total_pages} pages."
+    if params.page > total_pages:
+        return f"Error: Page {params.page} does not exist. There are only {total_pages} pages."
     
-    start_idx = (page - 1) * per_page
-    end_idx = min(page * per_page, total_emails)
+    start_idx = (params.page - 1) * params.per_page
+    end_idx = min(params.page * params.per_page, total_emails)
     
-    result = f"Showing emails {start_idx + 1}-{end_idx} of {total_emails} (Page {page}/{total_pages}):\n\n"
+    result = f"Showing emails {start_idx + 1}-{end_idx} of {total_emails} (Page {params.page}/{total_pages}):\n\n"
+    
     for i in range(start_idx, end_idx):
         email = cache_items[i]
         result += f"Email #{i + 1}\n"
         result += f"Subject: {email['subject']}\n"
-        
-        # Display sender name as-is
         result += f"From: {email['sender']}\n"
         
         # Display TO recipients if available
@@ -529,253 +461,12 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
         result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
         result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
     
-    result += f"Use view_email_cache_tool(page={page + 1}) to view next page." if page < total_pages else "This is the last page."
+    if params.page < total_pages:
+        result += f"Use view_email_cache_tool(page={params.page + 1}) to view next page."
+    else:
+        result += "This is the last page."
+    
     result += "\nCall get_email_details_tool() to get full content of the email."
     
     return result
 
-def format_search_results(emails: List[Dict], page: int = 1, per_page: int = 5) -> str:
-    """Format search results for display with pagination
-    
-    Args:
-        emails: List of email dictionaries
-        page: Page number (1-based)
-        per_page: Items per page
-        
-    Returns:
-        Formatted email previews as string
-    """
-    if not emails:
-        return "No matching emails found."
-    
-    total_emails = len(emails)
-    total_pages = (total_emails + per_page - 1) // per_page
-    
-    if page > total_pages:
-        return f"Error: Page {page} does not exist. There are only {total_pages} pages."
-    
-    start_idx = (page - 1) * per_page
-    end_idx = min(page * per_page, total_emails)
-    
-    result = f"Showing emails {start_idx + 1}-{end_idx} of {total_emails} (Page {page}/{total_pages}):\n\n"
-    for i in range(start_idx, end_idx):
-        email = emails[i]
-        result += f"Email #{i + 1}\n"
-        result += f"Subject: {email['subject']}\n"
-        
-        # Display sender name as-is
-        result += f"From: {email['sender']}\n"
-        
-        # Display TO recipients if available
-        if email.get('to_recipients'):
-            to_names = [r.get('name', '') for r in email['to_recipients']]
-            result += f"To: {', '.join(to_names)}\n"
-        
-        # Display CC recipients if available
-        if email.get('cc_recipients'):
-            cc_names = [r.get('name', '') for r in email['cc_recipients']]
-            result += f"Cc: {', '.join(cc_names)}\n"
-        
-        result += f"Received: {email['received_time']}\n"
-        result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
-        result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
-    
-    result += f"Use search_email_by_sender_name_tool(search_term='{email.get('sender', '')}', days={30}, page={page + 1}) to view next page." if page < total_pages else "This is the last page."
-    result += "\nCall get_email_details_tool() to get full content of the email."
-    
-    return result
-
-# Add specialized search functions for MCP server compatibility
-def search_email_by_subject(
-    search_term: str,
-    days: int = 7,
-    folder_name: Optional[str] = None,
-    match_all: bool = True
-) -> tuple[List[Dict], str]:
-    """Search emails by subject and return list of emails with note
-    
-    Args:
-        search_term: Search term to match in email subjects
-        days: Number of days to look back (default: 7)
-        folder_name: Optional folder name to search (default: Inbox)
-        match_all: If True (default), all terms must match (AND logic)
-                  If False, any term can match (OR logic)
-    
-    Returns:
-        Tuple of (email list, note string)
-    """
-    # Use server-side filtering for subject-only search
-    emails, note = get_emails_from_folder(
-        search_term=search_term,  # Use server-side filtering
-        days=days,
-        folder_name=folder_name,
-        match_all=match_all,
-        subject_filter_only=True  # Add this parameter to indicate subject-only filtering
-    )
-    
-    # If no results found with server-side filtering, try extended search
-    if not emails and search_term:
-        search_terms = search_term.lower().split()
-        if len(search_terms) == 1:
-            primary_term = search_terms[0]
-            
-            # Try broader search in longer time range
-            extended_emails, extended_note = get_emails_from_folder(
-                search_term=search_term,
-                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
-                folder_name=folder_name,
-                match_all=match_all,
-                subject_filter_only=True
-            )
-            
-            if extended_emails:
-                note += f" (extended search in last {min(90, days * 4)} days)"
-                return extended_emails, note
-    
-    return emails, note
-
-def search_email_by_from(
-    search_term: str,
-    days: int = 7,
-    folder_name: Optional[str] = None,
-    match_all: bool = True
-) -> tuple[List[Dict], str]:
-    """Search emails by sender name and return list of emails with note
-    
-    Args:
-        search_term: Search term to match in sender name
-        days: Number of days to look back (default: 7)
-        folder_name: Optional folder name to search (default: Inbox)
-        match_all: If True (default), all terms must match (AND logic)
-                  If False, any term can match (OR logic)
-    
-    Returns:
-        Tuple of (email list, note string)
-    """
-    # Use server-side filtering for sender name search
-    emails, note = get_emails_from_folder(
-        search_term=search_term,  # Use server-side filtering
-        days=days,
-        folder_name=folder_name,
-        match_all=match_all,
-        sender_filter_only=True  # Add this parameter to indicate sender-only filtering
-    )
-    
-    # If no results found with server-side filtering, try extended search
-    if not emails and search_term:
-        search_terms = search_term.lower().split()
-        if len(search_terms) == 1:
-            primary_term = search_terms[0]
-            
-            # Try broader search in longer time range
-            extended_emails, extended_note = get_emails_from_folder(
-                search_term=search_term,
-                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
-                folder_name=folder_name,
-                match_all=match_all,
-                sender_filter_only=True
-            )
-            
-            if extended_emails:
-                note += f" (extended search in last {min(90, days * 4)} days)"
-                return extended_emails, note
-    
-    return emails, note
-
-def search_email_by_to(
-    search_term: str,
-    days: int = 7,
-    folder_name: Optional[str] = None,
-    match_all: bool = True
-) -> tuple[List[Dict], str]:
-    """Search emails by recipient name and return list of emails with note
-    
-    Args:
-        search_term: Search term to match in recipient name
-        days: Number of days to look back (default: 7)
-        folder_name: Optional folder name to search (default: Inbox)
-        match_all: If True (default), all terms must match (AND logic)
-                  If False, any term can match (OR logic)
-    
-    Returns:
-        Tuple of (email list, note string)
-    """
-    # Use server-side filtering for recipient name search
-    emails, note = get_emails_from_folder(
-        search_term=search_term,  # Use server-side filtering
-        days=days,
-        folder_name=folder_name,
-        match_all=match_all,
-        recipient_filter_only=True  # Add this parameter to indicate recipient-only filtering
-    )
-    
-    # If no results found with server-side filtering, try extended search
-    if not emails and search_term:
-        search_terms = search_term.lower().split()
-        if len(search_terms) == 1:
-            primary_term = search_terms[0]
-            
-            # Try broader search in longer time range
-            extended_emails, extended_note = get_emails_from_folder(
-                search_term=search_term,
-                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
-                folder_name=folder_name,
-                match_all=match_all,
-                recipient_filter_only=True
-            )
-            
-            if extended_emails:
-                note += f" (extended search in last {min(90, days * 4)} days)"
-                return extended_emails, note
-    
-    return emails, note
-
-def search_email_by_body(
-    search_term: str,
-    days: int = 7,
-    folder_name: Optional[str] = None,
-    match_all: bool = True
-) -> tuple[List[Dict], str]:
-    """Search emails by body content and return list of emails with note
-    
-    Uses server-side filtering for optimal performance.
-    
-    Args:
-        search_term: Search term to match in email body
-        days: Number of days to look back (default: 7)
-        folder_name: Optional folder name to search (default: Inbox)
-        match_all: If True (default), all terms must match (AND logic)
-                  If False, any term can match (OR logic)
-    
-    Returns:
-        Tuple of (email list, note string)
-    """
-    # Use server-side filtering for body content search
-    emails, note = get_emails_from_folder(
-        search_term=search_term,  # Use server-side filtering
-        days=days,
-        folder_name=folder_name,
-        match_all=match_all,
-        body_filter_only=True  # Add this parameter to indicate body-only filtering
-    )
-    
-    # If no results found with server-side filtering, try extended search
-    if not emails and search_term:
-        search_terms = search_term.lower().split()
-        if len(search_terms) == 1:
-            primary_term = search_terms[0]
-            
-            # Try broader search in longer time range
-            extended_emails, extended_note = get_emails_from_folder(
-                search_term=search_term,
-                days=min(90, days * 4),  # Try up to 90 days or 4x current search range
-                folder_name=folder_name,
-                match_all=match_all,
-                body_filter_only=True
-            )
-            
-            if extended_emails:
-                note += f" (extended search in last {min(90, days * 4)} days)"
-                return extended_emails, note
-    
-    return emails, note

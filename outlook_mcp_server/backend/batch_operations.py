@@ -1,7 +1,11 @@
-import csv
+﻿import csv
+import logging
 
 from .outlook_session import OutlookSessionManager
 from .shared import email_cache
+from .utils import safe_encode_text, validate_email_address
+
+logger = logging.getLogger(__name__)
 
 def send_batch_emails(
     email_number: int,
@@ -30,10 +34,6 @@ def send_batch_emails(
         # Clean and validate CSV path
         clean_path = csv_path.strip('"\'')
         
-        # Validate email format
-        import re
-        email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-        
         # Read recipients from CSV
         with open(clean_path, 'r', newline='', encoding='utf-8-sig') as csvfile:
             reader = csv.DictReader(csvfile)
@@ -46,10 +46,11 @@ def send_batch_emails(
             for row in reader:
                 email = row.get('email', '').strip()
                 if email:
-                    if email_pattern.match(email):
+                    if validate_email_address(email):
                         recipients.append(email)
                     else:
                         invalid_emails.append(email)
+                        logger.warning(f"Invalid email address found: {email}")
             
         if invalid_emails:
             raise ValueError(f"Invalid email addresses found: {', '.join(invalid_emails[:5])}{'...' if len(invalid_emails) > 5 else ''}")
@@ -75,16 +76,11 @@ def send_batch_emails(
                     
                     # Copy relevant properties from template with encoding handling
                     try:
-                        # Handle subject encoding
-                        subject = template.Subject
-                        if isinstance(subject, bytes):
-                            subject = subject.decode('utf-8', errors='replace')
-                        elif not isinstance(subject, str):
-                            subject = str(subject)
-                        
+                        # Handle subject encoding using safe utility
+                        subject = safe_encode_text(template.Subject, 'batch_subject')
                         mail.Subject = f"FW: {subject}"
                     except Exception as e:
-                        print(f"WARNING: Encoding error in batch subject: {e}")
+                        logger.error(f"Encoding error in batch subject: {e}")
                         mail.Subject = "FW: [Subject encoding error]"
                     
                     mail.BCC = "; ".join(batch)
@@ -93,61 +89,31 @@ def send_batch_emails(
                     try:
                         if hasattr(template, 'HTMLBody') and template.HTMLBody:
                             mail.BodyFormat = 2  # 2 = olFormatHTML
+                            html_body = safe_encode_text(template.HTMLBody, 'batch_html_body')
                             
-                            # Handle HTML body encoding
-                            html_body = template.HTMLBody
-                            if isinstance(html_body, bytes):
-                                html_body = html_body.decode('utf-8', errors='replace')
-                            elif not isinstance(html_body, str):
-                                html_body = str(html_body)
-                            
-                            # Handle custom text encoding
                             if custom_text:
-                                if isinstance(custom_text, bytes):
-                                    custom_text = custom_text.decode('utf-8', errors='replace')
-                                elif not isinstance(custom_text, str):
-                                    custom_text = str(custom_text)
-                                
-                                safe_custom = custom_text.encode('ascii', errors='replace').decode('ascii')
+                                safe_custom = safe_encode_text(custom_text, 'batch_custom_text')
                                 mail.HTMLBody = f"<div>{safe_custom}</div><br><br>" + html_body
                             else:
                                 mail.HTMLBody = html_body
                         else:
                             mail.BodyFormat = 1  # 1 = olFormatPlain
-                            
-                            # Handle plain text body encoding
-                            plain_body = template.Body
-                            if isinstance(plain_body, bytes):
-                                plain_body = plain_body.decode('utf-8', errors='replace')
-                            elif not isinstance(plain_body, str):
-                                plain_body = str(plain_body)
+                            plain_body = safe_encode_text(template.Body, 'batch_plain_body')
                             
                             if custom_text:
-                                # Handle custom text encoding
-                                if isinstance(custom_text, bytes):
-                                    custom_text = custom_text.decode('utf-8', errors='replace')
-                                elif not isinstance(custom_text, str):
-                                    custom_text = str(custom_text)
-                                
-                                safe_custom = custom_text.encode('ascii', errors='replace').decode('ascii')
+                                safe_custom = safe_encode_text(custom_text, 'batch_custom_text')
                                 mail.Body = safe_custom + "\n\n-----Original Email-----\n\n" + plain_body
                             else:
                                 mail.Body = plain_body
-                    except UnicodeDecodeError as e:
-                        print(f"WARNING: Encoding error in batch body content: {e}")
-                        # Fallback to simple ASCII-safe content
-                        if hasattr(template, 'HTMLBody') and template.HTMLBody:
-                            mail.BodyFormat = 1  # Fallback to plain text
-                            mail.Body = "[HTML content with encoding issues - please view original email]"
-                        else:
-                            mail.Body = "[Content encoding error - please view original email]"
                     except Exception as e:
-                        print(f"WARNING: Error processing batch body: {e}")
+                        logger.error(f"Error processing batch body: {e}")
                         mail.Body = "[Content processing error - please view original email]"
                     
                     mail.Send()
+                    logger.info(f"Batch {i} sent to {len(batch)} recipients")
                     results.append(f"Batch {i} sent to {len(batch)} recipients")
                 except Exception as e:
+                    logger.error(f"Error sending batch {i}: {e}")
                     results.append(f"Error sending batch {i}: {str(e)}")
 
         return "\n".join([
@@ -156,4 +122,5 @@ def send_batch_emails(
         ])
         
     except Exception as e:
+        logger.error(f"Error in batch sending process: {e}")
         return f"Error in batch sending process: {str(e)}"

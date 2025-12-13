@@ -3,6 +3,7 @@ import logging
 import pythoncom
 import win32com.client
 from .shared import configure_logging
+from .utils import OutlookFolderType, retry_on_com_error
 
 # Initialize logging
 configure_logging()
@@ -12,12 +13,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 class OutlookSessionManager:
-    """Context manager for Outlook COM session handling"""
+    """Context manager for Outlook COM session handling with improved resource management"""
     def __init__(self):
         self.outlook = None
         self.namespace = None
         self.folder = None
         self._connected = False
+        self._com_initialized = False
         
     def __enter__(self):
         """Initialize Outlook COM objects"""
@@ -27,34 +29,62 @@ class OutlookSessionManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Clean up Outlook COM objects"""
         self._disconnect()
+        return False  # Don't suppress exceptions
         
+    @retry_on_com_error(max_attempts=3, initial_delay=1.0)
     def _connect(self):
-        """Establish COM connection with proper threading"""
+        """Establish COM connection with proper threading and retry logic"""
         try:
             pythoncom.CoInitialize()
+            self._com_initialized = True
             self.outlook = win32com.client.Dispatch("Outlook.Application")
             self.namespace = self.outlook.GetNamespace("MAPI")
             self._connected = True
+            logger.info("Successfully connected to Outlook")
         except Exception as e:
             logger.error(f"Connection error: {str(e)}")
+            self._cleanup_partial_connection()
             raise RuntimeError("Failed to connect to Outlook") from e
-            
-    def _disconnect(self):
-        """Clean up COM objects"""
-        if self._connected:
+    
+    def _cleanup_partial_connection(self):
+        """Clean up partial connection attempts"""
+        if self._com_initialized:
             try:
                 pythoncom.CoUninitialize()
+            except Exception as e:
+                logger.warning(f"Error cleaning up partial connection: {str(e)}")
+            finally:
+                self._com_initialized = False
+            
+    def _disconnect(self):
+        """Clean up COM objects with proper resource release"""
+        if self._connected:
+            try:
+                # Release COM objects explicitly
+                if self.namespace:
+                    self.namespace = None
+                if self.outlook:
+                    self.outlook = None
+                    
+                if self._com_initialized:
+                    pythoncom.CoUninitialize()
+                    self._com_initialized = False
+                    
+                logger.debug("Outlook connection cleaned up successfully")
             except Exception as e:
                 logger.warning(f"Error during disconnect: {str(e)}")
             finally:
                 self._connected = False
+                self.outlook = None
+                self.namespace = None
+                self.folder = None
                 
     def is_connected(self) -> bool:
         """Check if the session is still connected"""
         try:
             # Simple operation to test connection
             if self._connected and self.outlook:
-                self.outlook.GetNamespace("MAPI").GetDefaultFolder(6).Name
+                self.outlook.GetNamespace("MAPI").GetDefaultFolder(OutlookFolderType.INBOX).Name
                 return True
             return False
         except:
@@ -71,28 +101,28 @@ class OutlookSessionManager:
         try:
             # Handle string "null" as well as actual None
             if not folder_name or folder_name == "null" or folder_name.lower() == "inbox":
-                folder = self.namespace.GetDefaultFolder(6)  # 6 = olFolderInbox
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.INBOX)
                 return folder
             elif folder_name.lower() == "sent items" or folder_name.lower() == "sent":
-                folder = self.namespace.GetDefaultFolder(5)  # 5 = olFolderSentMail
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.SENT_MAIL)
                 return folder
             elif folder_name.lower() == "deleted items" or folder_name.lower() == "trash":
-                folder = self.namespace.GetDefaultFolder(3)  # 3 = olFolderDeletedItems
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.DELETED_ITEMS)
                 return folder
             elif folder_name.lower() == "drafts":
-                folder = self.namespace.GetDefaultFolder(16)  # 16 = olFolderDrafts
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.DRAFTS)
                 return folder
             elif folder_name.lower() == "outbox":
-                folder = self.namespace.GetDefaultFolder(4)  # 4 = olFolderOutbox
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.OUTBOX)
                 return folder
             elif folder_name.lower() == "calendar":
-                folder = self.namespace.GetDefaultFolder(9)  # 9 = olFolderCalendar
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.CALENDAR)
                 return folder
             elif folder_name.lower() == "contacts":
-                folder = self.namespace.GetDefaultFolder(10)  # 10 = olFolderContacts
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.CONTACTS)
                 return folder
             elif folder_name.lower() == "tasks":
-                folder = self.namespace.GetDefaultFolder(13)  # 13 = olFolderTasks
+                folder = self.namespace.GetDefaultFolder(OutlookFolderType.TASKS)
                 return folder
             else:
                 folder = self._get_folder_by_name(folder_name)
