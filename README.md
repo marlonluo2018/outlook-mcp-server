@@ -840,7 +840,7 @@ All search functions support nested folder paths:
     "folder_name": "Inbox"
   }
 }
-// Returns count and first page preview
+// Returns count message only. Use view_email_cache_tool to browse results.
 ```
 
 #### 3. Search Email by Subject
@@ -899,33 +899,20 @@ All search functions support nested folder paths:
 }
 ```
 
-#### Search Result Pagination and Formatting
+#### Search Result Format
 
-All search functions provide organized results with pagination support:
+All search functions return count messages only:
 
-- **Page Size**: Each page displays 5 emails by default
 - **Result Count**: Shows total number of matching emails
 - **Extended Search Notice**: Automatically indicates when extended search was used
-- **Navigation Help**: Provides instructions for viewing additional pages
-- **Consistent Formatting**: Same format across all search types
+- **Cache Loading**: Emails are loaded into cache for subsequent browsing
 
 **Example Result Format**:
 ```
-Found 15 matching emails
-
-Showing emails 1-5 of 15 (Page 1/3):
-
-Email #1
-Subject: Project Update Meeting Notes
-From: John Doe
-To: Team Members
-Received: 2024-12-10 14:30:00
-Read Status: Read
-Has Attachments: Yes
-
-Use search_email_by_sender_name_tool(search_term='John Doe', days=14, page=2) to view next page.
-Call get_email_details_tool() to get full content of the email.
+Found 15 matching emails from last 7 days. Use 'view_email_cache_tool' to view them.
 ```
+
+**Next Steps**: After getting the count, use `view_email_cache_tool` to browse the cached emails with pagination support (5 emails per page).
 
 #### 7. View Email Cache
 

@@ -9,8 +9,7 @@ from .backend.email_retrieval import (
     search_email_by_body,
     view_email_cache,
     get_email_by_number,
-    list_recent_emails,
-    format_search_results
+    list_recent_emails
 )
 from .backend.email_composition import (
     reply_to_email_by_number,
@@ -36,28 +35,25 @@ def get_folder_list_tool() -> dict:
 
 @mcp.tool
 def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) -> dict:
-   
-    """Gets email count and page 1 preview (5 emails).
+    """Load emails into cache and return count message.
     
     Args:
         days: Days to look back (1-30, default:7)
         folder_name: Folder to search (default:Inbox)
         
     Returns:
-        dict: Combined results in format:
+        dict: Response containing email count message:
         {
             "type": "text",
-            "text": "Count: X\n\nPreview: Y"
+            "text": "Found X emails from last Y days. Use 'view_email_cache_tool' to view them."
         }
     """
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
     count_result = list_recent_emails(folder_name=folder_name, days=days)
-    preview_result = view_email_cache(1)
-    combined_result = f"{count_result}\n\n{preview_result}"
     return {
         "type": "text",
-        "text": combined_result
+        "text": count_result
     }
 @mcp.tool
 def search_email_by_subject_tool(
@@ -66,7 +62,7 @@ def search_email_by_subject_tool(
     folder_name: Optional[str] = None,
     match_all: bool = True
 ) -> dict:
-    """Search email subjects return count and page 1 preview (5 emails).
+    """Search email subjects and load matching emails into cache.
     
     This function only searches the email subject field. It does not search in the email body,
     sender name, recipients, or other fields.
@@ -79,10 +75,10 @@ def search_email_by_subject_tool(
                   If False, matches ANY search term (OR logic)
 
     Returns:
-        dict: Response containing email count and previews
+        dict: Response containing email count message
         {
             "type": "text",
-            "text": "Count: X\n\nPreview: Y"
+            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
         }
 
     """
@@ -91,18 +87,11 @@ def search_email_by_subject_tool(
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
     emails, note = search_email_by_subject(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}"
-    if emails:
-        preview = view_email_cache(1)
-        return {
-            "type": "text",
-            "text": f"{result}\n\n{preview}"
-        }
-    else:
-        return {
-            "type": "text",
-            "text": result
-        }
+    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    return {
+        "type": "text",
+        "text": result
+    }
 
 @mcp.tool
 def search_email_by_sender_name_tool(
@@ -111,7 +100,7 @@ def search_email_by_sender_name_tool(
     folder_name: Optional[str] = None,
     match_all: bool = True
 ) -> dict:
-    """Search emails by sender name return count and page 1 preview (5 emails).
+    """Search emails by sender name and load matching emails into cache.
     
     This function only searches the sender name field. It does not search in the email body,
     subject, recipients, or other fields.
@@ -126,10 +115,10 @@ def search_email_by_sender_name_tool(
                   If False, matches ANY search term (OR logic)
 
     Returns:
-        dict: Response containing email count and previews
+        dict: Response containing email count message
         {
             "type": "text",
-            "text": "Count: X\n\nPreview: Y"
+            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
         }
 
     """
@@ -138,20 +127,11 @@ def search_email_by_sender_name_tool(
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
     emails, note = search_email_by_from(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}"
-    
-    if emails:
-        # Format filtered search results
-        preview = format_search_results(emails, page=1, per_page=5)
-        return {
-            "type": "text",
-            "text": f"{result}\n\n{preview}"
-        }
-    else:
-        return {
-            "type": "text",
-            "text": result
-        }
+    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    return {
+        "type": "text",
+        "text": result
+    }
 
 @mcp.tool
 def search_email_by_recipient_name_tool(
@@ -160,7 +140,7 @@ def search_email_by_recipient_name_tool(
     folder_name: Optional[str] = None,
     match_all: bool = True
 ) -> dict:
-    """Search emails by recipient name return count and page 1 preview (5 emails).
+    """Search emails by recipient name and load matching emails into cache.
     
     This function only searches the recipient (To) field. It does not search in the email body,
     subject, sender, or other fields.
@@ -175,10 +155,10 @@ def search_email_by_recipient_name_tool(
                   If False, matches ANY search term (OR logic)
 
     Returns:
-        dict: Response containing email count and previews
+        dict: Response containing email count message
         {
             "type": "text",
-            "text": "Count: X\n\nPreview: Y"
+            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
         }
 
     """
@@ -187,18 +167,11 @@ def search_email_by_recipient_name_tool(
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
     emails, note = search_email_by_to(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}"
-    if emails:
-        preview = view_email_cache(1)
-        return {
-            "type": "text",
-            "text": f"{result}\n\n{preview}"
-        }
-    else:
-        return {
-            "type": "text",
-            "text": result
-        }
+    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    return {
+        "type": "text",
+        "text": result
+    }
 
 @mcp.tool
 def search_email_by_body_tool(
@@ -207,7 +180,7 @@ def search_email_by_body_tool(
     folder_name: Optional[str] = None,
     match_all: bool = True
 ) -> dict:
-    """Search emails by body content return count and page 1 preview (5 emails).
+    """Search emails by body content and load matching emails into cache.
     
     This function searches the email body content. It does not search in the subject,
     sender name, recipients, or other fields.
@@ -225,10 +198,10 @@ def search_email_by_body_tool(
                   If False, matches ANY search term (OR logic)
 
     Returns:
-        dict: Response containing email count and previews
+        dict: Response containing email count message
         {
             "type": "text",
-            "text": "Count: X\n\nPreview: Y"
+            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
         }
 
     """
@@ -237,18 +210,11 @@ def search_email_by_body_tool(
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
     emails, note = search_email_by_body(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}"
-    if emails:
-        preview = view_email_cache(1)
-        return {
-            "type": "text",
-            "text": f"{result}\n\n{preview}"
-        }
-    else:
-        return {
-            "type": "text",
-            "text": result
-        }
+    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    return {
+        "type": "text",
+        "text": result
+    }
 
 @mcp.tool
 def view_email_cache_tool(page: int = 1) -> dict:
