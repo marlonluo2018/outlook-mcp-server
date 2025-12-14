@@ -247,7 +247,7 @@ The AI helps you send emails to multiple recipients efficiently:
 5. **Safe Sending** - Sends via BCC to protect recipient privacy
 
 **Batch Email Tools:**
-- `send_batch_emails_tool()` - Send template email to multiple recipients from CSV
+- `batch_forward_email_tool()` - Forward template email to multiple recipients from CSV
 
 **🔒 Key Safety Feature**: No emails are sent without your explicit approval!
 
@@ -270,7 +270,7 @@ The AI helps you send emails to multiple recipients efficiently:
 - `compose_email_tool(recipient_email, subject, body, cc_email=None)` - Compose new email
 
 ### Email Batch Operations (Requires User Confirmation)
-- `send_batch_emails_tool(email_number, csv_path, custom_text="")` - Send email to multiple recipients from CSV file
+- `batch_forward_email_tool(email_number, csv_path, custom_text="")` - Forward email to multiple recipients from CSV file
 
 **Batch Email Feature:**
 - Uses an email from your cache as a template
@@ -300,12 +300,12 @@ The AI helps you send emails to multiple recipients efficiently:
 **Solution**: "Draft personalized follow-up emails for all unread sales inquiries"
 
 ### Scenario 4: Event Organizer
-**Problem**: Need to send announcements to large contact lists
-**Solution**: "Forward this meeting invitation to all attendees from my contacts.csv file"
+**Problem**: Need to forward announcements to large contact lists
+**Solution**: "Use the batch_forward_email_tool to forward this meeting invitation to all attendees from my contacts.csv file"
 
 ### Scenario 5: HR Manager
-**Problem**: Send company-wide communications to employees
-**Solution**: "Use this policy update email as template and send it to all employees in employee_list.csv"
+**Problem**: Forward company-wide communications to employees
+**Solution**: "Use the batch_forward_email_tool to forward this policy update email to all employees in employee_list.csv"
 
 ## 💻 CLI Interface (Human Interaction)
 
@@ -321,7 +321,7 @@ python cli_interface.py
 - get_email - View full email details
 - reply_email - Reply to an email (requires confirmation)
 - compose_email - Create new email (requires confirmation)
-- send_batch_emails - Send email to multiple recipients from CSV (requires confirmation)
+- batch_forward_email - Forward email to multiple recipients from CSV (requires confirmation)
 ```
 
 ## � Technical Details

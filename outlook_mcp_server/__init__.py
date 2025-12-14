@@ -15,7 +15,7 @@ from .backend.email_composition import (
     reply_to_email_by_number,
     compose_email
 )
-from .backend.batch_operations import send_batch_emails
+from .backend.batch_operations import batch_forward_emails
 
 # Initialize FastMCP server
 mcp = FastMCP("outlook-assistant")
@@ -390,18 +390,18 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
     }
 
 @mcp.tool
-def send_batch_emails_tool(
+def batch_forward_email_tool(
     email_number: int,
     csv_path: str,
     custom_text: str = ""
 ) -> dict:
     """
     IMPORTANT: You MUST get explicit user confirmation before calling this tool.
-    Never send batch emails without the user's direct approval.
+    Never forward batch emails without the user's direct approval.
 
-    Send an email to recipients listed in a CSV file in batches of 500 (Outlook BCC limit).
+    Forward an email to recipients listed in a CSV file in batches of 500 (Outlook BCC limit).
     
-    This function uses an email from your cache as a template and sends it to multiple recipients
+    This function uses an email from your cache as a template and forwards it to multiple recipients
     from a CSV file. The email is sent via BCC to protect recipient privacy.
     
     Args:
@@ -431,6 +431,7 @@ def send_batch_emails_tool(
         - Invalid email addresses in the CSV will be skipped with warnings
         - The email is sent as BCC to protect recipient privacy
         - Recipients will see it as a forwarded email with "FW:" prefix
+        - This function forwards existing emails, it does not compose new ones
     """
     if not isinstance(email_number, int) or email_number < 1:
         raise ValueError("Email number must be a positive integer")
@@ -439,7 +440,7 @@ def send_batch_emails_tool(
     if not isinstance(custom_text, str):
         raise ValueError("Custom text must be a string")
     
-    result = send_batch_emails(email_number, csv_path, custom_text)
+    result = batch_forward_emails(email_number, csv_path, custom_text)
     return {
         "type": "text",
         "text": result

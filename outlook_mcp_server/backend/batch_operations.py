@@ -7,12 +7,12 @@ from .utils import safe_encode_text, validate_email_address
 
 logger = logging.getLogger(__name__)
 
-def send_batch_emails(
+def batch_forward_emails(
     email_number: int,
     csv_path: str,
     custom_text: str = ""
 ) -> str:
-    """Send email to recipients in batches of 500 (Outlook BCC limit)"""
+    """Forward email to recipients in batches of 500 (Outlook BCC limit)"""
     # Input validation
     if not isinstance(email_number, int) or email_number < 1:
         raise ValueError("Email number must be a positive integer")

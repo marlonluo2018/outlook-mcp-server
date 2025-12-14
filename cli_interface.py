@@ -20,7 +20,7 @@ try:
         compose_email,
         reply_to_email_by_number
     )
-    from outlook_mcp_server.backend.batch_operations import send_batch_emails
+    from outlook_mcp_server.backend.batch_operations import batch_forward_emails
     from outlook_mcp_server.backend.shared import email_cache
 except ImportError:
     try:
@@ -38,7 +38,7 @@ except ImportError:
             compose_email,
             reply_to_email_by_number
         )
-        from .backend.batch_operations import send_batch_emails
+        from .backend.batch_operations import batch_forward_emails
         from .backend.shared import email_cache
     except ImportError:
         # Finally try direct imports from same directory
@@ -56,7 +56,7 @@ except ImportError:
             compose_email,
             reply_to_email_by_number
         )
-        from outlook_mcp_server.backend.batch_operations import send_batch_emails
+        from outlook_mcp_server.backend.batch_operations import batch_forward_emails
         from outlook_mcp_server.backend.shared import email_cache
 
 def show_menu():
@@ -71,7 +71,7 @@ def show_menu():
     print("8. Get email details")
     print("9. Reply to email")
     print("10. Compose new email")
-    print("11. Send batch emails")
+    print("11. Batch forward emails")
     print("0. Exit")
 
 def interactive_mode():
@@ -278,7 +278,7 @@ def interactive_mode():
                         
                     csv_path = input("Enter path to CSV file: ").strip()
                     custom_text = input("Enter custom text to prepend (optional): ").strip()
-                    print("\n" + send_batch_emails(num, csv_path, custom_text))
+                    print("\n" + batch_forward_emails(num, csv_path, custom_text))
                 except ValueError:
                     print("\nInvalid input - must be a number")
                 

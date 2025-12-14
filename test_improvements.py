@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """Test script to verify all improvements work correctly"""
 import sys
@@ -202,9 +202,8 @@ def test_batch_operations():
     """Test batch_operations.py improvements"""
     print("\n=== Testing batch_operations.py ===")
     try:
-        from outlook_mcp_server.backend.batch_operations import send_batch_emails
-        
-        print("[OK] send_batch_emails imports correctly")
+        from outlook_mcp_server.backend.batch_operations import batch_forward_emails
+        print("[OK] batch_forward_emails imports correctly")
         
         print("[OK][OK][OK] batch_operations.py - STRUCTURE TESTS PASSED")
         return True
