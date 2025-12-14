@@ -804,6 +804,37 @@ Choose your action:
 
 **Best for**: Users who prefer direct, menu-driven control over email operations or need batch email capabilities.
 
+## 🤖 AI Agent Prompt Template
+
+When configuring AI assistants (like Claude, Trae IDE, or other MCP-compatible assistants) to work with the Outlook MCP Server, use the provided prompt template file.
+
+### How to Use the Template
+
+1. **Copy the template**: Open `agent_prompt_template.md` from the project root
+2. **Update the ROLE section**: Replace `[User Name]` and `[User Email]` with your actual details
+3. **Customize for your use case**:
+   - Modify workflows to match your specific requirements
+   - Add any company-specific constraints or procedures
+   - Update examples with relevant scenarios for your work
+4. **Add to your AI assistant**: Copy the customized prompt into your AI assistant's configuration
+5. **Test the integration**: Verify that the assistant can properly use the Outlook MCP Server tools
+
+### Template Features
+
+The template includes:
+- **Structured workflows** for email search, summarization, and drafting
+- **5-by-5 email browsing** with pagination support
+- **Phase-based drafting process** with iterative improvements
+- **Security constraints** requiring explicit user confirmation
+- **Practical examples** for common email management tasks
+
+### Customization Tips
+
+- **User Identity**: Update the ROLE section with your actual name and email (replace `[User Name]` and `[User Email]`)
+- **Workflow Requirements**: Modify the workflows to match your organization's email procedures
+- **Security Policies**: Add any compliance or security requirements specific to your environment
+- **Domain Examples**: Replace example scenarios with relevant cases for your work
+
 ## 🔍 Email Search System
 
 ### Search Types Overview
