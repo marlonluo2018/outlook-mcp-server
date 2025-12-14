@@ -43,6 +43,8 @@ Talk to your AI assistant like you would to a human:
 - **Python 3.8+** ([Download here](https://python.org/downloads/))
 - **Microsoft Outlook 2016+** (must be installed on your machine)
 - **Windows 10+** (required for Outlook integration)
+- **Python Dependencies**: `fastmcp` (MCP server framework) and `pywin32` (Outlook integration)
+  - Automatic with UVX method, manual install with `pip install -r requirements.txt` for other methods
 
 ### Complete Setup Guide
 
@@ -57,6 +59,8 @@ git clone https://github.com/marlonluo2018/outlook-mcp-server.git
 cd outlook-mcp-server
 uvx --with "pywin32>=226" --with-editable "c:\Project\outlook-mcp-server" outlook-mcp-server
 ```
+
+**Note**: UVX automatically installs dependencies from `requirements.txt` including `fastmcp` and `pywin32`.
 
 **Step 2: Configure Your AI Assistant**
 Use this configuration in your MCP client settings:
@@ -80,10 +84,13 @@ Use this configuration in your MCP client settings:
 #### 🔧 **Method 2: Standard Installation** - **Traditional Python Package**
 **Purpose**: For users who prefer traditional Python package management and want to install the package permanently
 
-**Step 1: Clone and Build**
+**Step 1: Clone and Install Dependencies**
 ```bash
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git
 cd outlook-mcp-server
+
+# Install required Python dependencies
+pip install -r requirements.txt
 
 # Install build tools if needed
 pip install build twine
@@ -121,10 +128,15 @@ pip install dist/outlook_mcp_server-*.whl
 #### 🔬 **Method 3: Direct Source (Development)** - **For Developers**
 **Purpose**: For developers who want to modify the code or run directly from source without building
 
-**Step 1: Clone and Run from Source**
+**Step 1: Clone and Install Dependencies**
 ```bash
 git clone https://github.com/marlonluo2018/outlook-mcp-server.git
 cd outlook-mcp-server
+
+# Install required Python dependencies
+pip install -r requirements.txt
+
+# Run directly from source
 python outlook_mcp_server/__main__.py
 ```
 
