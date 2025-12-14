@@ -2,7 +2,7 @@
 
 **Transform your Outlook inbox with AI-powered email management**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=marlonluo2018/outlook-mcp-server&type=Date)](https://star-history.com/#marlonluo2018/outlook-mcp-server&Date)
+[![Star](https://img.shields.io/github/stars/marlonluo2018/outlook-mcp-server?style=for-the-badge&label=Star%20this%20project&color=yellow)](https://github.com/marlonluo2018/outlook-mcp-server)
 
 > ⭐ **Love this project? Give it a star!** Your support helps us improve and reach more users who need AI email assistance.
 
