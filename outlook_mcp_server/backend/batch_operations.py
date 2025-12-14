@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import logging
 
 from .outlook_session import OutlookSessionManager
@@ -85,26 +85,52 @@ def send_batch_emails(
                     
                     mail.BCC = "; ".join(batch)
                     
-                    # Copy body content from template with proper encoding
+                    # Copy body content from template with proper encoding and email headers
                     try:
+                        # Extract email metadata for headers
+                        sender_name = safe_encode_text(getattr(template, 'SenderName', 'Unknown Sender'), 'sender_name')
+                        sent_on = safe_encode_text(str(getattr(template, 'SentOn', 'Unknown')), 'sent_on')
+                        to_field = safe_encode_text(getattr(template, 'To', 'Unknown'), 'to_field')
+                        subject = safe_encode_text(getattr(template, 'Subject', 'No Subject'), 'subject')
+                        
                         if hasattr(template, 'HTMLBody') and template.HTMLBody:
                             mail.BodyFormat = 2  # 2 = olFormatHTML
                             html_body = safe_encode_text(template.HTMLBody, 'batch_html_body')
                             
-                            if custom_text:
-                                safe_custom = safe_encode_text(custom_text, 'batch_custom_text')
-                                mail.HTMLBody = f"<div>{safe_custom}</div><br><br>" + html_body
-                            else:
-                                mail.HTMLBody = html_body
+                            # Build HTML email headers
+                            header_html = f"""
+<div>
+{'' if not custom_text else f'<div>{safe_encode_text(custom_text, "batch_custom_text")}</div><br>'}
+<div style="margin-bottom: 10px;">__________________________________________________</div>
+<div><strong>From:</strong> {sender_name}</div>
+<div><strong>Sent:</strong> {sent_on}</div>
+<div><strong>To:</strong> {to_field}</div>
+<div><strong>Subject:</strong> {subject}</div>
+<div style="margin-top: 10px; margin-bottom: 10px;">__________________________________________________</div>
+</div>
+<br><br>"""
+                            
+                            mail.HTMLBody = header_html + html_body
                         else:
                             mail.BodyFormat = 1  # 1 = olFormatPlain
-                            plain_body = safe_encode_text(template.Body, 'batch_plain_body')
+                            plain_body = safe_encode_text(getattr(template, 'Body', ''), 'batch_plain_body')
                             
+                            # Build plain text email headers
+                            header_lines = []
                             if custom_text:
-                                safe_custom = safe_encode_text(custom_text, 'batch_custom_text')
-                                mail.Body = safe_custom + "\n\n-----Original Email-----\n\n" + plain_body
-                            else:
-                                mail.Body = plain_body
+                                header_lines.append(safe_encode_text(custom_text, 'batch_custom_text'))
+                            header_lines.extend([
+                                "",
+                                "_" * 50,
+                                f"From: {sender_name}",
+                                f"Sent: {sent_on}",
+                                f"To: {to_field}",
+                                f"Subject: {subject}",
+                                "_" * 50,
+                                ""
+                            ])
+                            
+                            mail.Body = "\n".join(header_lines) + plain_body
                     except Exception as e:
                         logger.error(f"Error processing batch body: {e}")
                         mail.Body = "[Content processing error - please view original email]"
