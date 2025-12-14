@@ -229,7 +229,25 @@ The AI helps you draft perfect responses using a 4-step approach:
 
 **Email Composition Tools:**
 - `reply_to_email_by_number_tool()` - Reply to an email
-- `compose_email_tool()` - Compose a new email
+- `compose_email_tool()` - Compose new email
+
+#### **Phase 5: AI-Powered Batch Email Operations**
+The AI helps you send emails to multiple recipients efficiently:
+
+**What you can ask:**
+- "Forward this meeting invitation to all participants in my contact list"
+- "Send this project update to my entire team using recipients.csv"
+- "Broadcast this announcement to all employees with additional context"
+
+**How it works:**
+1. **Template Selection** - Uses an email from your cache as template
+2. **Recipient Loading** - Reads email addresses from CSV file with 'email' column
+3. **Batch Processing** - Automatically splits large lists into batches of 500
+4. **Content Customization** - Adds your custom text before original email
+5. **Safe Sending** - Sends via BCC to protect recipient privacy
+
+**Batch Email Tools:**
+- `send_batch_emails_tool()` - Send template email to multiple recipients from CSV
 
 **🔒 Key Safety Feature**: No emails are sent without your explicit approval!
 
@@ -251,6 +269,17 @@ The AI helps you draft perfect responses using a 4-step approach:
 - `reply_to_email_by_number_tool(email_number, reply_text, to_recipients=None, cc_recipients=None)` - Reply to email
 - `compose_email_tool(recipient_email, subject, body, cc_email=None)` - Compose new email
 
+### Email Batch Operations (Requires User Confirmation)
+- `send_batch_emails_tool(email_number, csv_path, custom_text="")` - Send email to multiple recipients from CSV file
+
+**Batch Email Feature:**
+- Uses an email from your cache as a template
+- Reads recipient email addresses from a CSV file with 'email' column
+- Automatically splits large lists into batches of 500 (Outlook BCC limit)
+- Adds custom text before the original email content
+- Preserves email formatting with consistent break lines
+- Sends via BCC to protect recipient privacy
+
 **Search Behavior:**
 - All search tools support `match_all=True` (AND logic) or `match_all=False` (OR logic)
 - Email body searching is slower than other fields
@@ -270,6 +299,14 @@ The AI helps you draft perfect responses using a 4-step approach:
 **Problem**: Follow up with leads efficiently
 **Solution**: "Draft personalized follow-up emails for all unread sales inquiries"
 
+### Scenario 4: Event Organizer
+**Problem**: Need to send announcements to large contact lists
+**Solution**: "Forward this meeting invitation to all attendees from my contacts.csv file"
+
+### Scenario 5: HR Manager
+**Problem**: Send company-wide communications to employees
+**Solution**: "Use this policy update email as template and send it to all employees in employee_list.csv"
+
 ## 💻 CLI Interface (Human Interaction)
 
 For direct human interaction, use the CLI interface:
@@ -284,6 +321,7 @@ python cli_interface.py
 - get_email - View full email details
 - reply_email - Reply to an email (requires confirmation)
 - compose_email - Create new email (requires confirmation)
+- send_batch_emails - Send email to multiple recipients from CSV (requires confirmation)
 ```
 
 ## � Technical Details
