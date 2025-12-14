@@ -314,7 +314,11 @@ We welcome contributions! Here's how you can help:
 3. **Code Contributions**: Fork the repo and submit pull requests
 4. **Documentation**: Help improve docs for better user experience
 
-## 📄 License
+## � Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=marlonluo2018/outlook-mcp-server&type=Date)](https://star-history.com/#marlonluo2018/outlook-mcp-server&Date)
+
+## �📄 License
 
 This project is open source and available under the MIT License.
 
