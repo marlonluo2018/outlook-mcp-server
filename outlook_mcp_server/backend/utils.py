@@ -216,3 +216,33 @@ def sanitize_search_term(search_term: str) -> str:
     sanitized = ''.join(c for c in search_term if c.isalnum() or c in ' .-_@')
     
     return sanitized.strip()
+
+
+def normalize_email_address(email: str) -> str:
+    """
+    Normalize email address for comparison by handling case sensitivity,
+    display name formats, and extra whitespace.
+    
+    Args:
+        email: Email address to normalize
+        
+    Returns:
+        str: Normalized email address for comparison
+    """
+    if not email:
+        return ""
+    
+    # Strip whitespace and trailing semicolons
+    normalized = email.strip().rstrip(';').strip()
+    
+    # Extract email from display name format "Name <email@domain.com>"
+    if '<' in normalized and '>' in normalized:
+        start = normalized.find('<')
+        end = normalized.find('>')
+        if start < end:
+            normalized = normalized[start+1:end]
+    
+    # Convert to lowercase for case-insensitive comparison
+    normalized = normalized.lower()
+    
+    return normalized

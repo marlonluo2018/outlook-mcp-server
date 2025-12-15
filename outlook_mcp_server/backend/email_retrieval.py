@@ -1,4 +1,4 @@
-﻿"""Email retrieval functions with consolidated search and improved error handling"""
+"""Email retrieval functions with consolidated search and improved error handling"""
 from datetime import datetime, timedelta, timezone
 import time
 import logging
@@ -10,6 +10,40 @@ from .utils import OutlookItemClass, build_dasl_filter, get_pagination_info, saf
 from .validators import EmailSearchParams, EmailListParams, PaginationParams
 
 logger = logging.getLogger(__name__)
+
+
+def _format_recipient_for_display(recipient) -> str:
+    """Format recipient for display using enhanced display name + email format.
+    
+    Args:
+        recipient: Recipient data (dict with display_name and email, or legacy format)
+        
+    Returns:
+        Formatted recipient string (e.g., "Display Name <email@domain.com>" or just "email@domain.com")
+    """
+    if isinstance(recipient, dict):
+        display_name = recipient.get('display_name', '').strip()
+        email = recipient.get('email', '').strip()
+        
+        # Enhanced format: Display Name <email@domain.com>
+        if display_name and email:
+            return f"{display_name} <{email}>"
+        # Fallback: just email
+        elif email:
+            return email
+        # Fallback: just display name
+        elif display_name:
+            return display_name
+        # Ultimate fallback: return empty string
+        else:
+            return ""
+    
+    # Legacy format support
+    elif isinstance(recipient, str):
+        return recipient.strip()
+    
+    # Fallback for unexpected types
+    return str(recipient) if recipient else ""
 
 
 def _unified_search(
@@ -218,6 +252,62 @@ def get_emails_from_folder(
                         sender_name = sender_name.split(',')[0].strip()
                         sender_name = ' '.join(sender_name.split())
                         
+                        # Extract actual email addresses and display names from Recipients collection
+                        to_recipients_list = []
+                        cc_recipients_list = []
+                        
+                        if hasattr(item, 'Recipients'):
+                            for recipient in item.Recipients:
+                                try:
+                                    if hasattr(recipient, 'AddressEntry'):
+                                        address_entry = recipient.AddressEntry
+                                        
+                                        # Initialize recipient data
+                                        email_address = None
+                                        display_name = None
+                                        
+                                        # Try to get display name
+                                        if hasattr(address_entry, 'Name'):
+                                            display_name = safe_encode_text(address_entry.Name, 'recipient_name')
+                                        
+                                        # Try to get SMTP email address for Exchange users
+                                        if hasattr(address_entry, 'GetExchangeUser'):
+                                            try:
+                                                exchange_user = address_entry.GetExchangeUser()
+                                                if exchange_user and hasattr(exchange_user, 'PrimarySmtpAddress'):
+                                                    email_address = safe_encode_text(exchange_user.PrimarySmtpAddress, 'recipient_email')
+                                            except Exception as e:
+                                                logger.debug(f"Failed to get Exchange user: {e}")
+                                        
+                                        # Fallback to Address if Exchange user failed
+                                        if not email_address and hasattr(address_entry, 'Address'):
+                                            address = safe_encode_text(address_entry.Address, 'recipient_address')
+                                            # Check if it's a valid SMTP email address
+                                            if '@' in address and not address.startswith('/'):
+                                                email_address = address
+                                        
+                                        # Create recipient entry with both display name and email if available
+                                        recipient_data = {}
+                                        
+                                        # Add display name if available
+                                        if display_name:
+                                            recipient_data['display_name'] = display_name
+                                        
+                                        # Add email address if available
+                                        if email_address:
+                                            recipient_data['email'] = email_address
+                                        
+                                        # Only add if we have at least one piece of information
+                                        if recipient_data:
+                                            if recipient.Type == 1:  # To recipient
+                                                to_recipients_list.append(recipient_data)
+                                            elif recipient.Type == 2:  # CC recipient
+                                                cc_recipients_list.append(recipient_data)
+                                                
+                                except Exception as e:
+                                    logger.warning(f"Failed to process recipient: {e}")
+                                    continue
+                        
                         email_data = {
                             'id': getattr(item, 'EntryID', ''),
                             'subject': safe_encode_text(getattr(item, 'Subject', 'No Subject'), 'subject'),
@@ -225,8 +315,8 @@ def get_emails_from_folder(
                             'sender_email': safe_encode_text(getattr(item, 'SenderEmailAddress', ''), 'sender_email'),
                             'received_time': str(received_datetime),
                             'unread': getattr(item, 'UnRead', False),
-                            'to_recipients': [{'name': safe_encode_text(getattr(item, 'To', ''), 'to_recipients')}],
-                            'cc_recipients': [{'name': safe_encode_text(getattr(item, 'CC', ''), 'cc_recipients')}]
+                            'to_recipients': to_recipients_list if to_recipients_list else [{'email': safe_encode_text(getattr(item, 'To', ''), 'to_recipients')}],
+                            'cc_recipients': cc_recipients_list if cc_recipients_list else [{'email': safe_encode_text(getattr(item, 'CC', ''), 'cc_recipients')}]
                         }
                         
                         emails.append(email_data)
@@ -364,12 +454,10 @@ def get_email_by_number(email_number: int) -> Optional[Dict]:
         'size': email.get('size', 0),
         'body': email.get('body', ''),
         'to': ', '.join([
-            r.get('name', '') if isinstance(r, dict) else str(r)
-            for r in email.get('to_recipients', [])
+            _format_recipient_for_display(r) for r in email.get('to_recipients', [])
         ]) if email.get('to_recipients') else '',
         'cc': ', '.join([
-            r.get('name', '') if isinstance(r, dict) else str(r)
-            for r in email.get('cc_recipients', [])
+            _format_recipient_for_display(r) for r in email.get('cc_recipients', [])
         ]) if email.get('cc_recipients') else '',
         'attachments': email.get('attachments', [])
     }
@@ -449,12 +537,12 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
         
         # Display TO recipients if available
         if email.get('to_recipients'):
-            to_names = [r.get('name', '') for r in email['to_recipients']]
+            to_names = [_format_recipient_for_display(r) for r in email['to_recipients']]
             result += f"To: {', '.join(to_names)}\n"
         
         # Display CC recipients if available
         if email.get('cc_recipients'):
-            cc_names = [r.get('name', '') for r in email['cc_recipients']]
+            cc_names = [_format_recipient_for_display(r) for r in email['cc_recipients']]
             result += f"Cc: {', '.join(cc_names)}\n"
         
         result += f"Received: {email['received_time']}\n"

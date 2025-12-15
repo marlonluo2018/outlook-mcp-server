@@ -4,7 +4,7 @@ import logging
 
 from .outlook_session import OutlookSessionManager
 from .shared import email_cache
-from .utils import safe_encode_text
+from .utils import safe_encode_text, normalize_email_address
 from .validators import EmailReplyParams, EmailComposeParams
 
 logger = logging.getLogger(__name__)
@@ -52,30 +52,69 @@ def reply_to_email_by_number(
     if not 1 <= email_number <= len(cache_items):
         raise ValueError(f"Email #{email_number} not found in current listing.")
     
-    email_id = cache_items[email_number - 1]["id"]
+    cached_email = cache_items[email_number - 1]
     
     with OutlookSessionManager() as session:
         try:
-            email = session.namespace.GetItemFromID(email_id)
+            email = session.namespace.GetItemFromID(cached_email["id"])
             if not email:
                 raise RuntimeError("Could not retrieve the email from Outlook.")
-                
+            
             # Create a new email message to have full control over formatting
             new_mail = session.outlook.CreateItem(0)  # 0 = olMailItem
             
             # Determine recipients based on parameters
             if to_recipients is None and cc_recipients is None:
                 # ReplyAll behavior - get all original recipients
-                new_mail.To = safe_encode_text(getattr(email, 'SenderEmailAddress', 'unknown@example.com'), 'to_address')
-                # Get CC recipients from original email if any
-                original_cc = safe_encode_text(getattr(email, 'CC', ''), 'cc_address')
-                if original_cc:
-                    new_mail.CC = original_cc
+                sender_email = safe_encode_text(getattr(email, 'SenderEmailAddress', 'unknown@example.com'), 'to_address')
+                new_mail.To = sender_email
+                
+                # Normalize sender email for comparison
+                normalized_sender_email = normalize_email_address(sender_email)
+                
+                # Use cached recipient data to avoid Outlook name resolution issues
+                unique_recipients = set()
+                
+                # Get TO recipients from cache using both display names and email addresses
+                to_recipients_data = cached_email.get('to_recipients', [])
+                for recipient_info in to_recipients_data:
+                    if isinstance(recipient_info, dict):
+                        recipient_email = recipient_info.get('email', '').strip()
+                        recipient_display_name = recipient_info.get('display_name', '').strip()
+                        normalized_recipient_email = normalize_email_address(recipient_email)
+                        
+                        if recipient_email and normalized_recipient_email != normalized_sender_email:
+                            # Prefer display name with email, fallback to just email
+                            if recipient_display_name:
+                                recipient_string = f"{recipient_display_name} <{recipient_email}>"
+                            else:
+                                recipient_string = recipient_email
+                            unique_recipients.add(recipient_string)
+                
+                # Get CC recipients from cache using both display names and email addresses
+                cc_recipients_data = cached_email.get('cc_recipients', [])
+                for recipient_info in cc_recipients_data:
+                    if isinstance(recipient_info, dict):
+                        recipient_email = recipient_info.get('email', '').strip()
+                        recipient_display_name = recipient_info.get('display_name', '').strip()
+                        normalized_recipient_email = normalize_email_address(recipient_email)
+                        
+                        if recipient_email and normalized_recipient_email != normalized_sender_email:
+                            # Prefer display name with email, fallback to just email
+                            if recipient_display_name:
+                                recipient_string = f"{recipient_display_name} <{recipient_email}>"
+                            else:
+                                recipient_string = recipient_email
+                            unique_recipients.add(recipient_string)
+                
+                # Set CC field with all unique recipients if any
+                if unique_recipients:
+                    new_mail.CC = '; '.join(sorted(unique_recipients))
             else:
                 # Use custom recipients
-                if to_recipients:
+                if to_recipients is not None:
                     new_mail.To = "; ".join(to_recipients)
-                if cc_recipients:
+                if cc_recipients is not None:
                     new_mail.CC = "; ".join(cc_recipients)
 
             # Set subject with RE: prefix
