@@ -435,6 +435,7 @@ def interactive_mode():
 
 def main():
     interactive_mode()
+    print("hello")
 
 if __name__ == '__main__':
     main()
