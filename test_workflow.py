@@ -58,8 +58,8 @@ def test_actual_workflow():
         normalized = email.strip().rstrip(';').strip()
         if '<' in normalized and '>' in normalized:
             start = normalized.find('<')
-            end =')
-            if start normalized.find('> < end:
+            end = normalized.find('>')
+            if start < end:
                 normalized = normalized[start+1:end]
         normalized = normalized.lower()
         return normalized
