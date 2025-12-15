@@ -5,7 +5,7 @@ import logging
 from typing import List, Dict, Optional, Tuple
 
 from .outlook_session import OutlookSessionManager
-from .shared import MAX_DAYS, MAX_EMAILS, MAX_LOAD_TIME, email_cache
+from .shared import MAX_DAYS, MAX_EMAILS, MAX_LOAD_TIME, email_cache, save_email_cache, clear_email_cache, add_email_to_cache
 from .utils import OutlookItemClass, build_dasl_filter, get_pagination_info, safe_encode_text
 from .validators import EmailSearchParams, EmailListParams, PaginationParams
 
@@ -143,7 +143,7 @@ def get_emails_from_folder(
         Tuple of (email list, limit note string)
     """
     # Clear cache before loading new emails
-    email_cache.clear()
+    clear_email_cache()
     
     emails = []
     start_time = time.time()
@@ -320,7 +320,8 @@ def get_emails_from_folder(
                         }
                         
                         emails.append(email_data)
-                        email_cache[email_data['id']] = email_data
+                        add_email_to_cache(email_data['id'], email_data)
+                        save_email_cache()
                         
                     except Exception as e:
                         failed_count += 1

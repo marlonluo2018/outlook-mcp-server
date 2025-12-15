@@ -200,7 +200,7 @@ Your AI assistant helps you find emails using natural language commands:
   - `search_email_by_sender_name_tool()` - Search by sender name
   - `search_email_by_recipient_name_tool()` - Search by recipient name
   - `search_email_by_body_tool()` - Search email body content (slower)
-- Results are loaded into a temporary cache (5 emails per page)
+- Results are loaded into the persistent unified cache (5 emails per page for browsing, with backend limit of 1000 entries)
 
 #### **Phase 2: Browse & Preview Emails**
 Emails are displayed in a clean, consistent format with exactly 5 emails per page:
@@ -342,7 +342,12 @@ python cli_interface.py
 - **Frontend**: MCP-compatible AI assistants (Claude, GPT, etc.)
 - **Backend**: Python-based MCP server with Outlook COM integration
 - **Communication**: Standard MCP protocol over stdio
-- **Caching**: In-memory email cache with pagination support
+- **Caching**: Unified file-based cache system (JSON files stored in `%LOCALAPPDATA%\outlook_mcp_server`)
+  - Automatic persistence handles UVX process isolation by saving cache state to disk
+  - 1-hour cache expiry with size management (MAX_CACHE_SIZE=1000 entries)
+  - Each client runs its own isolated server instance, ensuring cache separation
+  - Automatic save/load on cache operations with error handling
+  - LRU-like eviction of oldest entries when cache limit is reached
 
 ### Dependencies
 - **Core**: Python 3.8+, pywin32>=226
@@ -352,8 +357,9 @@ python cli_interface.py
 
 ### Performance
 - **Search Speed**: Subject/sender search: fast, Body search: slower
-- **Cache Size**: 5 emails per page for optimal browsing
-- **Memory**: Efficient caching with automatic cleanup
+- **Cache Size**: 5 emails per page for optimal browsing, with backend cache limit of 1000 entries
+- **Persistence**: Automatic file-based storage ensures cache survives process restarts (especially important for UVX configuration)
+- **Memory**: Efficient caching with automatic LRU cleanup when cache limit is reached
 
 ## 🤝 Contributing
 

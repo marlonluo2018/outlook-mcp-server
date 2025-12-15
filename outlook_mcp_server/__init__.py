@@ -1,6 +1,8 @@
 from typing import List, Optional, Union
 from fastmcp import FastMCP
 from .backend.outlook_session import OutlookSessionManager
+# Import shared module to ensure cache is loaded on startup
+from .backend import shared
 from .backend.email_retrieval import (
     list_folders,
     search_email_by_subject,
