@@ -29,3 +29,4 @@ outlook_mcp_server/__pycache__/__main__.cpython-311.pyc
 .gitignore
 outlook_mcp_server/backend/__pycache__/utils.cpython-311.pyc
 outlook_mcp_server/backend/__pycache__/validators.cpython-311.pyc
+
