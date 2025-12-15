@@ -449,6 +449,200 @@ def batch_forward_email_tool(
     }
 
 
+@mcp.tool
+def create_folder_tool(folder_name: str, parent_folder_name: Optional[str] = None) -> dict:
+    """Create a new folder in the specified parent folder.
+    
+    Args:
+        folder_name: Name of the folder to create
+        parent_folder_name: Name of the parent folder (optional, defaults to Inbox)
+    
+    Returns:
+        dict: Response containing confirmation message
+        {
+            "type": "text", 
+            "text": "Folder created successfully: folder_path"
+        }
+    """
+    if not folder_name or not isinstance(folder_name, str):
+        raise ValueError("Folder name must be a non-empty string")
+    if parent_folder_name and not isinstance(parent_folder_name, str):
+        raise ValueError("Parent folder name must be a string")
+    
+    try:
+        with OutlookSessionManager() as outlook_session:
+            result = outlook_session.create_folder(folder_name, parent_folder_name)
+            return {
+                "type": "text",
+                "text": result
+            }
+    except Exception as e:
+        return {
+            "type": "text",
+            "text": f"Error creating folder: {str(e)}"
+        }
+
+@mcp.tool
+def remove_folder_tool(folder_name: str) -> dict:
+    """Remove an existing folder.
+    
+    Args:
+        folder_name: Name or path of the folder to remove
+    
+    Returns:
+        dict: Response containing confirmation message
+        {
+            "type": "text",
+            "text": "Folder removed successfully"
+        }
+    """
+    if not folder_name or not isinstance(folder_name, str):
+        raise ValueError("Folder name must be a non-empty string")
+    
+    try:
+        with OutlookSessionManager() as outlook_session:
+            result = outlook_session.remove_folder(folder_name)
+            return {
+                "type": "text",
+                "text": result
+            }
+    except Exception as e:
+        return {
+            "type": "text",
+            "text": f"Error removing folder: {str(e)}"
+        }
+
+@mcp.tool
+def move_email_tool(email_number: int, target_folder_name: str) -> dict:
+    """Move an email to the specified folder.
+    
+    Args:
+        email_number: The number of the email in the cache to move (1-based)
+        target_folder_name: Name or path of the target folder
+    
+    Returns:
+        dict: Response containing confirmation message
+        {
+            "type": "text",
+            "text": "Email moved successfully to target_folder"
+        }
+    
+    Note:
+        Requires emails to be loaded first via list_recent_emails or search_emails.
+        After moving, the cache will be cleared to reflect the new email positions.
+    """
+    if not isinstance(email_number, int) or email_number < 1:
+        raise ValueError("Email number must be a positive integer")
+    if not target_folder_name or not isinstance(target_folder_name, str):
+        raise ValueError("Target folder name must be a non-empty string")
+    
+    try:
+        with OutlookSessionManager() as outlook_session:
+            result = outlook_session.move_email(email_number, target_folder_name)
+            return {
+                "type": "text",
+                "text": result
+            }
+    except Exception as e:
+        return {
+            "type": "text",
+            "text": f"Error moving email: {str(e)}"
+        }
+
+@mcp.tool
+def delete_email_tool(email_number: int) -> dict:
+    """Delete an email.
+    
+    Args:
+        email_number: The number of the email in the cache to delete (1-based)
+    
+    Returns:
+        dict: Response containing confirmation message
+        {
+            "type": "text",
+            "text": "Email deleted successfully"
+        }
+    
+    Note:
+        Requires emails to be loaded first via list_recent_emails or search_emails.
+    """
+    if not isinstance(email_number, int) or email_number < 1:
+        raise ValueError("Email number must be a positive integer")
+    
+    try:
+        with OutlookSessionManager() as outlook_session:
+            result = outlook_session.delete_email(email_number)
+            return {
+                "type": "text",
+                "text": result
+            }
+    except Exception as e:
+        return {
+            "type": "text",
+            "text": f"Error deleting email: {str(e)}"
+        }
+
+@mcp.tool
+def get_email_policies_tool(email_number: int) -> dict:
+    """Get enterprise policies assigned to an email.
+    
+    Args:
+        email_number: The number of the email in the cache to check (1-based)
+        
+    Returns:
+        dict: Response containing assigned policies
+        {
+            "type": "text",
+            "text": "Assigned policies for email:\n- Policy1\n- Policy2\n\nor\nNo policies assigned"
+        }
+    
+    Note:
+        Requires emails to be loaded first via list_recent_emails or search_emails.
+    """
+    if not isinstance(email_number, int) or email_number < 1:
+        raise ValueError("Email number must be a positive integer")
+    
+    try:
+        # First get the email from cache to get the email ID
+        email_data = get_email_by_number(email_number)
+        if email_data is None:
+            return {
+                "type": "text",
+                "text": f"No email found at position {email_number}. Please load emails first using list_recent_emails or search_emails."
+            }
+        
+        # Get the email ID (EntryID) from the cached data
+        email_id = email_data.get('id', '')
+        if not email_id:
+            return {
+                "type": "text",
+                "text": "Email data is missing the required ID for policy retrieval."
+            }
+        
+        # Now get the policies using the email ID
+        with OutlookSessionManager() as outlook_session:
+            policies = outlook_session.get_email_policies(email_id)
+            
+            if policies:
+                result = "Assigned policies for email:\n" + "\n".join(f"- {policy}" for policy in policies)
+            else:
+                result = "No policies assigned to this email."
+                
+            return {
+                "type": "text",
+                "text": result
+            }
+    except Exception as e:
+        return {
+            "type": "text",
+            "text": f"Error getting email policies: {str(e)}"
+        }
+
+
+
+
+
+
 # Main function for UVX entry point
 def main():
     """Main function to start the Outlook MCP Server."""
