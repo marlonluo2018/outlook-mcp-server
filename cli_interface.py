@@ -72,6 +72,11 @@ def show_menu():
     print("9. Reply to email")
     print("10. Compose new email")
     print("11. Batch forward emails")
+    print("12. Create folder")
+    print("13. Remove folder")
+    print("14. Move email")
+    print("15. Delete email")
+    print("16. Policy management")
     print("0. Exit")
 
 def interactive_mode():
@@ -281,7 +286,146 @@ def interactive_mode():
                     print("\n" + batch_forward_emails(num, csv_path, custom_text))
                 except ValueError:
                     print("\nInvalid input - must be a number")
+                    
+            elif choice == "12":
+                # Create folder
+                try:
+                    folder_name = input("Enter new folder name: ").strip()
+                    parent_folder = input("Enter parent folder name (leave blank for Inbox): ").strip() or None
+                    with OutlookSessionManager() as outlook_session:
+                        result = outlook_session.create_folder(folder_name, parent_folder)
+                        print(f"\n{result}")
+                except Exception as e:
+                    print(f"\nError creating folder: {str(e)}")
+                    
+            elif choice == "13":
+                # Remove folder
+                try:
+                    folder_name = input("Enter folder name or path to remove: ").strip()
+                    with OutlookSessionManager() as outlook_session:
+                        result = outlook_session.remove_folder(folder_name)
+                        print(f"\n{result}")
+                except Exception as e:
+                    print(f"\nError removing folder: {str(e)}")
+                    
+            elif choice == "14":
+                # Move email
+                if not email_cache:
+                    print("\nNo emails in cache - load emails first")
+                    continue
+                    
+                try:
+                    num = int(input("Enter email number to move: ").strip())
+                    if num < 1 or num > len(email_cache):
+                        print("\nInvalid email number")
+                        continue
+                        
+                    target_folder = input("Enter target folder name: ").strip()
+                    email_id = list(email_cache.keys())[num-1]
+                    
+                    with OutlookSessionManager() as outlook_session:
+                        result = outlook_session.move_email(email_id, target_folder)
+                        print(f"\n{result}")
+                        # Refresh cache after moving
+                        email_cache.clear()
+                        print("Cache cleared - reload emails to see updated status")
+                except ValueError:
+                    print("\nInvalid input - must be a number")
+                except Exception as e:
+                    print(f"\nError moving email: {str(e)}")
+                    
+            elif choice == "15":
+                # Delete email
+                if not email_cache:
+                    print("\nNo emails in cache - load emails first")
+                    continue
+                    
+                try:
+                    num = int(input("Enter email number to delete: ").strip())
+                    if num < 1 or num > len(email_cache):
+                        print("\nInvalid email number")
+                        continue
+                        
+                    email_id = list(email_cache.keys())[num-1]
+                    
+                    with OutlookSessionManager() as outlook_session:
+                        result = outlook_session.delete_email(email_id)
+                        print(f"\n{result}")
+                        # Refresh cache after deleting
+                        email_cache.pop(email_id, None)
+                        print("Email removed from cache")
+                except ValueError:
+                    print("\nInvalid input - must be a number")
+                except Exception as e:
+                    print(f"\nError deleting email: {str(e)}")
+                    
+            elif choice == "16":
+                # Policy management
+                print("\nPolicy Management")
+                print("1. Check assigned policies for an email")
+                print("2. Check available policies")
+                print("3. Assign policy to email")
+                print("0. Back to main menu")
                 
+                policy_choice = input("\nEnter policy command number: ").strip()
+                
+                if policy_choice == "0":
+                    continue
+                    
+                if policy_choice in ["1", "3"] and not email_cache:
+                    print("\nNo emails in cache - load emails first")
+                    continue
+                    
+                try:
+                    with OutlookSessionManager() as outlook_session:
+                        if policy_choice == "1":
+                            # Check assigned policies
+                            num = int(input("Enter email number: ").strip())
+                            if num < 1 or num > len(email_cache):
+                                print("\nInvalid email number")
+                                continue
+                                
+                            email_id = list(email_cache.keys())[num-1]
+                            policies = outlook_session.get_email_policies(email_id)
+                            
+                            if policies:
+                                print(f"\nAssigned policies for email {num}:")
+                                for policy in policies:
+                                    print(f"- {policy}")
+                            else:
+                                print(f"\nNo policies assigned to email {num}")
+                            
+                        elif policy_choice == "2":
+                            # Check available policies
+                            available_policies = outlook_session.get_available_policies()
+                            print("\nAvailable policies:")
+                            for policy in available_policies:
+                                print(f"- {policy}")
+                            
+                        elif policy_choice == "3":
+                            # Assign policy to email
+                            num = int(input("Enter email number: ").strip())
+                            if num < 1 or num > len(email_cache):
+                                print("\nInvalid email number")
+                                continue
+                                
+                            email_id = list(email_cache.keys())[num-1]
+                            
+                            # Show available policies
+                            print("\nAvailable policies:")
+                            available_policies = outlook_session.get_available_policies()
+                            for policy in available_policies:
+                                print(f"- {policy}")
+                                
+                            policy = input("\nEnter policy name to assign: ").strip()
+                            result = outlook_session.assign_policy(email_id, policy)
+                            print(f"\n{result}")
+                            
+                except ValueError:
+                    print("\nInvalid input - must be a number")
+                except Exception as e:
+                    print(f"\nError in policy management: {str(e)}")
+            
             elif choice == "0":
                 break
                 

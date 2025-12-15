@@ -1,3 +1,5 @@
+from typing import Optional
+
 # Global configuration constants
 MAX_DAYS = 30
 MAX_EMAILS = 1000
@@ -120,6 +122,30 @@ def load_email_cache():
         # Initialize empty cache on error
         email_cache = {}
         email_cache_order = []
+
+def get_email_from_cache(email_number: int) -> Optional[dict]:
+    """Get an email from cache by its cache number (1-based).
+    
+    Args:
+        email_number: The 1-based position of the email in the cache
+        
+    Returns:
+        The email data dictionary, or None if not found
+        
+    Raises:
+        ValueError: If email_number is out of range
+    """
+    global email_cache, email_cache_order
+    
+    # Check if email_number is within valid range
+    if email_number < 1 or email_number > len(email_cache_order):
+        raise ValueError(f"Email number {email_number} is out of range. Available range: 1-{len(email_cache_order)}")
+    
+    # Convert to 0-based index and get the email_id
+    email_id = email_cache_order[email_number - 1]
+    
+    # Return the email data
+    return email_cache.get(email_id)
 
 def clear_email_cache():
     """Clear the email cache both in memory and on disk."""
