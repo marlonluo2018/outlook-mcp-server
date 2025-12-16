@@ -3,10 +3,7 @@ import logging
 import pythoncom
 import win32com.client
 import time
-<<<<<<< HEAD
 import datetime
-=======
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
 from .shared import configure_logging, get_email_from_cache
 from .utils import OutlookFolderType, retry_on_com_error
 
@@ -137,25 +134,45 @@ class OutlookSessionManager:
             raise
             
     def _get_folder_by_name(self, folder_name: str):
-        """Find folder by name in folder hierarchy, supporting nested paths"""
+        """Find folder by name in folder hierarchy, supporting nested paths and mailbox-specific paths"""
         try:
-            # Handle nested folder paths (e.g., "Parent Folder/Child Folder")
+            # Handle nested folder paths (e.g., "Parent Folder/Child Folder" or "mailbox@domain.com/Inbox/Folder")
             if '/' in folder_name or '\\' in folder_name:
                 # Use forward slash as path separator, but also support backslash
                 path_parts = folder_name.replace('\\', '/').split('/')
                 current_folder = None
                 
-                # Start with the top-level folders
-                for folder in self.namespace.Folders:
-                    if folder.Name == path_parts[0]:
-                        current_folder = folder
-                        break
+                # Check if first part looks like an email address (mailbox-specific path)
+                if '@' in path_parts[0] and '.' in path_parts[0]:
+                    # This is a mailbox-specific path like "luomn@cn.ibm.com/Inbox/Folder"
+                    mailbox_name = path_parts[0]
+                    
+                    # Find the mailbox folder
+                    for folder in self.namespace.Folders:
+                        if folder.Name == mailbox_name:
+                            current_folder = folder
+                            break
+                    
+                    if not current_folder:
+                        raise ValueError(f"Mailbox '{mailbox_name}' not found")
+                    
+                    # Navigate through the remaining path parts
+                    remaining_parts = path_parts[1:]
+                else:
+                    # This is a regular path like "Inbox/Folder" or "Parent Folder/Child Folder"
+                    # Start with the top-level folders
+                    for folder in self.namespace.Folders:
+                        if folder.Name == path_parts[0]:
+                            current_folder = folder
+                            break
+                    
+                    if not current_folder:
+                        raise ValueError(f"Top-level folder '{path_parts[0]}' not found")
+                    
+                    remaining_parts = path_parts[1:]
                 
-                if not current_folder:
-                    raise ValueError(f"Top-level folder '{path_parts[0]}' not found")
-                
-                # Navigate through the path
-                for part in path_parts[1:]:
+                # Navigate through the remaining path parts
+                for part in remaining_parts:
                     found = False
                     for subfolder in current_folder.Folders:
                         if subfolder.Name == part:
@@ -184,7 +201,7 @@ class OutlookSessionManager:
         """Create a new folder in the specified parent folder.
         
         Args:
-            folder_name: Name of the folder to create
+            folder_name: Name of the folder to create, or full path (e.g., "Inbox/SubFolder1/SubFolder2")
             parent_folder_name: Name of the parent folder (optional, defaults to Inbox)
             
         Returns:
@@ -194,17 +211,53 @@ class OutlookSessionManager:
             if not folder_name:
                 raise ValueError("Folder name cannot be empty")
             
-            # Get the parent folder
-            parent_folder = self.get_folder(parent_folder_name)
-            
-            # Check if folder already exists
-            for folder in parent_folder.Folders:
-                if folder.Name == folder_name:
-                    raise ValueError(f"Folder '{folder_name}' already exists in '{parent_folder.Name}'")
-            
-            # Create the folder
-            new_folder = parent_folder.Folders.Add(folder_name)
-            folder_path = f"{parent_folder.Name}/{folder_name}" if parent_folder.Name != "Inbox" else folder_name
+            # Handle nested folder creation
+            if '/' in folder_name:
+                # Full path provided, parse it
+                path_parts = folder_name.split('/')
+                if len(path_parts) > 3:
+                    raise ValueError("Maximum 3 folder levels supported (e.g., 'Inbox/SubFolder1/SubFolder2')")
+                
+                # Start with the first part as parent
+                current_parent = self.get_folder(path_parts[0])
+                
+                # Create intermediate folders if needed
+                for i in range(1, len(path_parts) - 1):
+                    subfolder_name = path_parts[i]
+                    # Check if subfolder exists
+                    subfolder = None
+                    for folder in current_parent.Folders:
+                        if folder.Name == subfolder_name:
+                            subfolder = folder
+                            break
+                    
+                    if subfolder is None:
+                        subfolder = current_parent.Folders.Add(subfolder_name)
+                        logger.info(f"Created intermediate folder: {subfolder_name}")
+                    
+                    current_parent = subfolder
+                
+                # Create the final folder
+                final_folder_name = path_parts[-1]
+                # Check if final folder already exists
+                for folder in current_parent.Folders:
+                    if folder.Name == final_folder_name:
+                        raise ValueError(f"Folder '{folder_name}' already exists")
+                
+                new_folder = current_parent.Folders.Add(final_folder_name)
+                folder_path = folder_name
+            else:
+                # Simple folder creation
+                parent_folder = self.get_folder(parent_folder_name)
+                
+                # Check if folder already exists
+                for folder in parent_folder.Folders:
+                    if folder.Name == folder_name:
+                        raise ValueError(f"Folder '{folder_name}' already exists in '{parent_folder.Name}'")
+                
+                # Create the folder
+                new_folder = parent_folder.Folders.Add(folder_name)
+                folder_path = f"{parent_folder.Name}/{folder_name}" if parent_folder.Name != "Inbox" else folder_name
             
             logger.info(f"Successfully created folder: {folder_path}")
             return folder_path
@@ -217,7 +270,7 @@ class OutlookSessionManager:
         """Remove an existing folder.
         
         Args:
-            folder_name: Name or path of the folder to remove
+            folder_name: Name or path of the folder to remove (supports nested paths like "Inbox/SubFolder1/SubFolder2")
             
         Returns:
             Confirmation message
@@ -226,16 +279,43 @@ class OutlookSessionManager:
             if not folder_name:
                 raise ValueError("Folder name cannot be empty")
             
-            # Get the folder to remove
-            folder = self._get_folder_by_name(folder_name)
+            # Handle nested folder paths
+            if '/' in folder_name:
+                # Split the path and navigate to the folder
+                path_parts = folder_name.split('/')
+                if len(path_parts) > 3:
+                    raise ValueError("Maximum 3 folder levels supported (e.g., 'Inbox/SubFolder1/SubFolder2')")
+                
+                # Start from the root folder
+                current_folder = self.get_folder(path_parts[0])
+                
+                # Navigate through the path
+                for i in range(1, len(path_parts)):
+                    subfolder_name = path_parts[i]
+                    subfolder = None
+                    
+                    for folder in current_folder.Folders:
+                        if folder.Name == subfolder_name:
+                            subfolder = folder
+                            break
+                    
+                    if subfolder is None:
+                        raise ValueError(f"Folder '{folder_name}' not found")
+                    
+                    current_folder = subfolder
+                
+                folder_to_remove = current_folder
+            else:
+                # Simple folder removal
+                folder_to_remove = self._get_folder_by_name(folder_name)
             
             # Check if we're trying to remove a default folder
             default_folder_names = ["Inbox", "Sent Items", "Deleted Items", "Drafts", "Outbox", "Calendar", "Contacts", "Tasks"]
-            if folder.Name in default_folder_names:
-                raise ValueError(f"Cannot remove default folder: '{folder.Name}'")
+            if folder_to_remove.Name in default_folder_names:
+                raise ValueError(f"Cannot remove default folder: '{folder_to_remove.Name}'")
             
             # Remove the folder
-            folder.Delete()
+            folder_to_remove.Delete()
             
             logger.info(f"Successfully removed folder: {folder_name}")
             return f"Folder '{folder_name}' removed successfully"
@@ -243,9 +323,8 @@ class OutlookSessionManager:
             logger.error(f"Error removing folder: {str(e)}")
             raise
     
-    @retry_on_com_error(max_attempts=3, initial_delay=1.0)
     def move_email(self, email_id: str, target_folder_name: str) -> str:
-        """Move an email to the specified folder.
+        """Move an email to the specified folder with robust error handling.
         
         Args:
             email_id: EntryID of the email to move
@@ -254,30 +333,148 @@ class OutlookSessionManager:
         Returns:
             Confirmation message
         """
+        if not email_id:
+            raise ValueError("Email ID cannot be empty")
+        if not target_folder_name:
+            raise ValueError("Target folder name cannot be empty")
+        
+        max_attempts = 3
+        initial_delay = 1.0
+        
+        for attempt in range(max_attempts):
+            try:
+                # Get the email item with validation
+                email_item = self._get_email_item_with_validation(email_id)
+                
+                if email_item is None:
+                    raise ValueError(f"Could not load email with ID: {email_id}")
+                
+                # Validate item state before moving
+                if not self._validate_email_item(email_item):
+                    if attempt < max_attempts - 1:
+                        logger.warning(f"Email item validation failed on attempt {attempt + 1}, retrying...")
+                        time.sleep(initial_delay * (2 ** attempt))
+                        continue
+                    else:
+                        raise ValueError("Email item is in an invalid state and cannot be moved")
+                
+                # Get the target folder
+                target_folder = self._get_folder_by_name(target_folder_name)
+                
+                # Get subject before moving for logging
+                try:
+                    email_subject = getattr(email_item, 'Subject', 'Unknown Subject')
+                    if not email_subject:
+                        email_subject = f"Email ID: {email_id[:20]}..."
+                except Exception as e:
+                    logger.warning(f"Could not retrieve email subject: {e}")
+                    email_subject = f"Email ID: {email_id[:20]}..."
+                
+                # Move the email
+                email_item.Move(target_folder)
+                
+                logger.info(f"Successfully moved email '{email_subject}' to folder '{target_folder_name}'")
+                return f"Email moved successfully to '{target_folder_name}'"
+                
+            except pythoncom.com_error as e:
+                error_code = e.hresult if hasattr(e, 'hresult') else None
+                
+                # Handle the specific error code
+                if error_code == -2147352567:
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            f"COM error (-2147352567) on attempt {attempt + 1}/{max_attempts} while moving email, "
+                            f"retrying in {initial_delay * (2 ** attempt)}s... Error: {e}"
+                        )
+                        time.sleep(initial_delay * (2 ** attempt))
+                        continue
+                    else:
+                        logger.error(f"Failed to move email after {max_attempts} attempts due to COM access error")
+                        raise RuntimeError(
+                            f"Could not access the email item for moving. This may indicate the email "
+                            f"is being processed by another operation or the item reference is stale. "
+                            f"Please try again or check if the email exists. Error: {str(e)}"
+                        )
+                else:
+                    # Other COM errors - don't retry
+                    logger.error(f"COM error while moving email: {e}")
+                    raise
+            except Exception as e:
+                logger.error(f"Unexpected error while moving email: {str(e)}")
+                raise
+        
+        # This should not be reached, but just in case
+        raise RuntimeError(f"Failed to move email after {max_attempts} attempts")
+    
+    def move_folder(self, source_folder_path: str, target_parent_path: str) -> str:
+        """Move a folder and all its emails to a new location.
+        
+        Args:
+            source_folder_path: Path to the source folder (e.g., "Inbox/SubFolder1" or "mailbox@domain.com/Inbox/Folder")
+            target_parent_path: Path to the target parent folder (e.g., "Inbox/NewParent" or "mailbox@domain.com/Inbox/NewParent")
+            
+        Returns:
+            Confirmation message
+        """
+        if not source_folder_path:
+            raise ValueError("Source folder path cannot be empty")
+        if not target_parent_path:
+            raise ValueError("Target parent path cannot be empty")
+        
         try:
-            if not email_id:
-                raise ValueError("Email ID cannot be empty")
-            if not target_folder_name:
-                raise ValueError("Target folder name cannot be empty")
+            # Parse source path
+            source_parts = source_folder_path.split('/')
+            if len(source_parts) > 4:  # Allow up to 4 levels for mailbox paths like "mailbox@domain.com/Inbox/Folder/SubFolder"
+                raise ValueError("Maximum 4 folder levels supported")
             
-            # Get the email item
-            email_item = self.namespace.GetItemFromID(email_id)
+            # Parse target path
+            target_parts = target_parent_path.split('/')
+            if len(target_parts) > 4:
+                raise ValueError("Maximum 4 folder levels supported")
             
-            # Get the target folder
-            target_folder = self._get_folder_by_name(target_folder_name)
+            # Get the source folder using the enhanced method
+            source_folder = self._get_folder_by_name(source_folder_path)
             
-            # Move the email
-            email_item.Move(target_folder)
+            # Check if we're trying to move a default folder
+            default_folder_names = ["Inbox", "Sent Items", "Deleted Items", "Drafts", "Outbox", "Calendar", "Contacts", "Tasks"]
+            if source_folder.Name in default_folder_names:
+                raise ValueError(f"Cannot move default folder: '{source_folder.Name}'")
             
-            logger.info(f"Successfully moved email '{email_item.Subject}' to folder '{target_folder_name}'")
-            return f"Email moved successfully to '{target_folder_name}'"
+            # Get the target parent folder using the enhanced method
+            target_parent = self._get_folder_by_name(target_parent_path)
+            
+            # Check if a folder with the same name already exists in target
+            for folder in target_parent.Folders:
+                if folder.Name == source_folder.Name:
+                    raise ValueError(f"Folder '{source_folder.Name}' already exists in '{target_parent_path}'")
+            
+            # Count emails in the source folder
+            email_count = 0
+            try:
+                for item in source_folder.Items:
+                    if hasattr(item, 'Class') and item.Class == 43:  # MailItem class
+                        email_count += 1
+            except Exception as e:
+                logger.warning(f"Could not count emails in folder: {e}")
+            
+            # Move the folder using MoveTo method (Move is not available on folder objects)
+            source_folder.MoveTo(target_parent)
+            
+            # Construct new path
+            if target_parent_path == "Inbox":
+                new_path = f"Inbox/{source_folder.Name}"
+            else:
+                new_path = f"{target_parent_path}/{source_folder.Name}"
+            
+            logger.info(f"Successfully moved folder '{source_folder_path}' to '{new_path}' with {email_count} emails")
+            return f"Folder moved successfully from '{source_folder_path}' to '{new_path}' ({email_count} emails moved)"
+            
         except Exception as e:
-            logger.error(f"Error moving email: {str(e)}")
+            logger.error(f"Error moving folder: {str(e)}")
             raise
     
-    @retry_on_com_error(max_attempts=3, initial_delay=1.0)
     def delete_email(self, email_id: str) -> str:
-        """Delete an email.
+        """Move an email to the Deleted Items folder instead of hard deletion.
         
         Args:
             email_id: EntryID of the email to delete
@@ -285,44 +482,162 @@ class OutlookSessionManager:
         Returns:
             Confirmation message
         """
+        if not email_id:
+            raise ValueError("Email ID cannot be empty")
+        
+        max_attempts = 3
+        initial_delay = 1.0
+        
+        for attempt in range(max_attempts):
+            try:
+                # Get the email item with retry logic
+                email_item = self._get_email_item_with_validation(email_id)
+                
+                if email_item is None:
+                    raise ValueError(f"Could not load email with ID: {email_id}")
+                
+                # Validate item state before moving
+                if not self._validate_email_item(email_item):
+                    if attempt < max_attempts - 1:
+                        logger.warning(f"Email item validation failed on attempt {attempt + 1}, retrying...")
+                        time.sleep(initial_delay * (2 ** attempt))
+                        continue
+                    else:
+                        raise ValueError("Email item is in an invalid state and cannot be moved")
+                
+                # Get subject before moving for logging
+                try:
+                    email_subject = getattr(email_item, 'Subject', 'Unknown Subject')
+                    if not email_subject:
+                        email_subject = f"Email ID: {email_id[:20]}..."
+                except Exception as e:
+                    logger.warning(f"Could not retrieve email subject: {e}")
+                    email_subject = f"Email ID: {email_id[:20]}..."
+                
+                # Get the Deleted Items folder
+                deleted_items_folder = self.get_folder("Deleted Items")
+                
+                # Move the email to Deleted Items instead of hard deletion
+                email_item.Move(deleted_items_folder)
+                
+                logger.info(f"Successfully moved email '{email_subject}' to Deleted Items")
+                return f"Email moved to Deleted Items successfully: '{email_subject}'"
+                
+            except pythoncom.com_error as e:
+                error_code = e.hresult if hasattr(e, 'hresult') else None
+                
+                # Handle the specific error code mentioned by the user
+                if error_code == -2147352567:
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            f"COM error (-2147352567) on attempt {attempt + 1}/{max_attempts} while moving email to Deleted Items, "
+                            f"retrying in {initial_delay * (2 ** attempt)}s... Error: {e}"
+                        )
+                        time.sleep(initial_delay * (2 ** attempt))
+                        continue
+                    else:
+                        logger.error(f"Failed to move email to Deleted Items after {max_attempts} attempts due to COM access error")
+                        raise RuntimeError(
+                            f"Could not access the email item for moving to Deleted Items. This may indicate the email "
+                            f"is being processed by another operation or the item reference is stale. "
+                            f"Please try again or check if the email exists. Error: {str(e)}"
+                        )
+                else:
+                    # Other COM errors - don't retry
+                    logger.error(f"COM error while moving email to Deleted Items: {e}")
+                    raise
+            except Exception as e:
+                logger.error(f"Unexpected error while moving email to Deleted Items: {str(e)}")
+                raise
+        
+        # This should not be reached, but just in case
+        raise RuntimeError(f"Failed to move email to Deleted Items after {max_attempts} attempts")
+    
+    def _get_email_item_with_validation(self, email_id: str):
+        """Get email item with validation and retry logic.
+        
+        Args:
+            email_id: EntryID of the email
+            
+        Returns:
+            Email item object or None if failed
+        """
         try:
-            if not email_id:
-                raise ValueError("Email ID cannot be empty")
-            
-            # Get the email item
             email_item = self.namespace.GetItemFromID(email_id)
-            email_subject = email_item.Subject
             
-            # Delete the email
-            email_item.Delete()
+            # Verify the item was loaded successfully
+            if email_item is None:
+                logger.warning(f"GetItemFromID returned None for email ID: {email_id}")
+                return None
             
-            logger.info(f"Successfully deleted email: '{email_subject}'")
-            return f"Email deleted successfully: '{email_subject}'"
+            # Try to access a basic property to ensure the item is fully loaded
+            try:
+                _ = email_item.Class
+                return email_item
+            except pythoncom.com_error as e:
+                logger.warning(f"Email item not fully loaded, COM error: {e}")
+                return None
+                
+        except pythoncom.com_error as e:
+            logger.warning(f"COM error getting email item: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Error deleting email: {str(e)}")
-            raise
+            logger.warning(f"Unexpected error getting email item: {e}")
+            return None
+    
+    def _validate_email_item(self, email_item) -> bool:
+        """Validate that an email item is in a state suitable for deletion.
+        
+        Args:
+            email_item: The email item to validate
+            
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        try:
+            # Check if the item is accessible
+            if not hasattr(email_item, 'Class'):
+                return False
+            
+            # Try to access the EntryID to ensure it's a valid Outlook item
+            try:
+                item_entry_id = email_item.EntryID
+                if not item_entry_id:
+                    return False
+            except:
+                return False
+            
+            # Check if it's actually a mail item
+            try:
+                item_class = email_item.Class
+                # Outlook MailItem class is typically 43
+                if hasattr(item_class, 'value'):
+                    item_class = item_class.value
+                if item_class != 43:  # MailItem class
+                    logger.warning(f"Item is not a mail item, class: {item_class}")
+                    return False
+            except:
+                # If we can't check the class, assume it's valid
+                pass
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Error validating email item: {e}")
+            return False
     
     @retry_on_com_error(max_attempts=3, initial_delay=1.0)
-<<<<<<< HEAD
     def get_email_policies(self, email_id: str) -> dict:
         """Get Exchange retention policies assigned to an email.
-=======
-    def get_email_policies(self, email_id: str) -> list:
-        """Get policies assigned to an email.
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
         
         Args:
             email_id: EntryID of the email to check
             
         Returns:
-<<<<<<< HEAD
             Dictionary with Exchange retention policies:
             {
                 'policies': [...]  # List of Exchange retention policies
             }
-=======
-            List of assigned policy names
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
         """
         try:
             if not email_id:
@@ -331,7 +646,6 @@ class OutlookSessionManager:
             # Get the email item
             email_item = self.namespace.GetItemFromID(email_id)
             
-<<<<<<< HEAD
             # Only check for real Exchange retention policies
             policies = []
             
@@ -383,50 +697,6 @@ class OutlookSessionManager:
             return {
                 'policies': policies
             }
-=======
-            # Get policy information (Outlook uses UserProperties for custom properties)
-            policies = []
-            
-            # Check for built-in sensitivity property
-            if hasattr(email_item, 'Sensitivity'):
-                sensitivity = email_item.Sensitivity
-                if sensitivity == 1:  # Low
-                    policies.append("Low Sensitivity")
-                elif sensitivity == 2:  # Normal
-                    pass  # Normal sensitivity is default, not added as a policy
-                elif sensitivity == 3:  # Personal
-                    policies.append("Personal")
-                elif sensitivity == 4:  # Private
-                    policies.append("Private")
-                elif sensitivity == 5:  # Confidential
-                    policies.append("Confidential")
-            
-            # Check for custom policy properties (Information Rights Management)
-            if hasattr(email_item, 'PermissionService') and email_item.PermissionService != 0:
-                policies.append("Information Rights Management")
-            
-            # Check for custom UserProperties including enterprise policies
-            if hasattr(email_item, 'UserProperties'):
-                for prop in email_item.UserProperties:
-                    # Check for enterprise policies
-                    if prop.Name.lower() == "enterprise_policy" and prop.Value:
-                        policies.append(prop.Value)
-                    # Check for other policy-related properties
-                    elif prop.Name.lower() in ['policy', 'sensitivity', 'classification'] and prop.Value:
-                        policies.append(prop.Value)
-            
-            # Check Categories field for fallback policy assignment
-            categories = getattr(email_item, 'Categories', '')
-            if categories:
-                # Look for policy indicators in categories
-                category_list = [cat.strip() for cat in categories.split(';') if cat.strip()]
-                for category in category_list:
-                    if category in ['4-years', 'Personal', 'Private', 'Confidential']:
-                        policies.append(category)
-            
-            logger.info(f"Retrieved policies for email: {policies}")
-            return policies
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
         except Exception as e:
             logger.error(f"Error getting email policies: {str(e)}")
             raise
@@ -467,7 +737,6 @@ class OutlookSessionManager:
             except Exception as e:
                 logger.warning(f"Could not retrieve built-in sensitivity levels: {str(e)}")
             
-<<<<<<< HEAD
             # 2. Dynamically detect Exchange retention policies by querying actual emails
             logger.info("Starting dynamic retention policy detection...")
             try:
@@ -562,9 +831,6 @@ class OutlookSessionManager:
                 logger.warning("This is normal if no retention policies are assigned to emails")
             
             # 3. Try to get IRM (Information Rights Management) policies from Exchange/Outlook
-=======
-            # 2. Try to get IRM (Information Rights Management) policies from Exchange/Outlook
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
             try:
                 # Try to access policy templates through Outlook stores
                 stores = self.namespace.Stores
@@ -586,25 +852,13 @@ class OutlookSessionManager:
             except Exception as e:
                 logger.debug(f"Could not retrieve IRM policies from stores: {str(e)}")
             
-<<<<<<< HEAD
             # 4. Check for other policy-related information in the environment
-=======
-            # 3. Try to detect custom policies through MAPI properties
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
             try:
                 # Check user's default folder for any policy-related information
                 try:
                     default_folder = self.namespace.GetDefaultFolder(1)  # olFolderInbox
-<<<<<<< HEAD
                     
                     # Look for any UserProperties that might indicate custom policies
-=======
-                    # Check if there are any policy-related user properties or custom policies
-                    # This is where Exchange might store custom policy information
-                    
-                    # Look for any UserProperties that might indicate custom policies
-                    # Note: This is a best-effort approach as Exchange policy storage varies
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
                     if hasattr(default_folder, 'UserProperties'):
                         user_props = default_folder.UserProperties
                         for i in range(1, user_props.Count + 1):
@@ -617,81 +871,6 @@ class OutlookSessionManager:
                     
             except Exception as e:
                 logger.debug(f"Could not retrieve custom policies: {str(e)}")
-            
-<<<<<<< HEAD
-=======
-            # 4. Try to detect actual custom policies from Outlook's actual policy templates
-            # Only add policies that actually exist in the Outlook environment
-            try:
-                # Check if we can access actual policy templates from Outlook
-                # This is more realistic than hardcoding a list
-                
-                # First, try to get the user's actual Outlook store policies
-                stores = self.namespace.Stores
-                actual_policies_found = False
-                
-                for i in range(1, stores.Count + 1):
-                    store = stores.Item(i)
-                    try:
-                        # Try to access policy-related information from the store
-                        # Look for actual policy templates or sensitivity options
-                        
-                        # Create a test mail to check for custom sensitivity levels
-                        test_mail = self.application.CreateItem(0)  # olMailItem
-                        
-                        # Check if there are custom sensitivity options beyond the built-in ones
-                        # In enterprise environments, there might be additional sensitivity levels
-                        try:
-                            # Some enterprise Outlook installations have custom sensitivity levels
-                            # Try to detect them by testing various values
-                            for sensitivity_value in range(4, 10):  # Test values beyond built-in 0-3
-                                try:
-                                    test_mail.Sensitivity = sensitivity_value
-                                    # If we can set it, it might be a valid sensitivity level
-                                    # But we can't easily map these back to names without Outlook UI
-                                    logger.debug(f"Found potential custom sensitivity value: {sensitivity_value}")
-                                except Exception:
-                                    # This sensitivity level is not available
-                                    pass
-                                    
-                            # Clean up the test mail
-                            test_mail.Delete()
-                            
-                        except Exception as e:
-                            logger.debug(f"Could not test custom sensitivity levels: {str(e)}")
-                            test_mail.Delete()
-                            
-                        # Try to access store-specific policy information
-                        try:
-                            root_folder = store.GetRootFolder()
-                            # Check for any policy-related properties that might give us actual policy names
-                            if hasattr(root_folder, 'UserProperties'):
-                                for prop_idx in range(1, root_folder.UserProperties.Count + 1):
-                                    prop = root_folder.UserProperties.Item(prop_idx)
-                                    if prop and 'policy' in str(prop.Name).lower():
-                                        # Found a potential policy property
-                                        logger.debug(f"Found policy-related property: {prop.Name}")
-                                        
-                        except Exception as e:
-                            logger.debug(f"Could not access store policy properties: {str(e)}")
-                            
-                    except Exception as e:
-                        logger.debug(f"Could not access store policies from {store.DisplayName}: {str(e)}")
-                
-                # For now, only add the specific "4-years" policy that the user mentioned
-                # In a real implementation, this would query the actual Exchange server for policies
-                # Since we can't easily detect all custom policies without Exchange access,
-                # we'll only include the policy the user specifically mentioned
-                user_mentioned_policy = "4-years"
-                if user_mentioned_policy not in [p.replace(" (Enterprise)", "") for p in available_policies]:
-                    available_policies.append(f"{user_mentioned_policy} (Enterprise)")
-                    logger.debug(f"Added user-mentioned policy: {user_mentioned_policy}")
-                    actual_policies_found = True
-                            
-            except Exception as e:
-                logger.debug(f"Could not detect actual enterprise policies: {str(e)}")
-            
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
             # Ensure we always have at least the basic Outlook policies
             if not available_policies:
                 available_policies = ["Normal", "Personal", "Private", "Confidential"]
@@ -711,11 +890,7 @@ class OutlookSessionManager:
         
         Args:
             email_id: EntryID of the email to assign policy to
-<<<<<<< HEAD
             policy_name: Name of the policy to assign (can be display name or value)
-=======
-            policy_name: Name of the policy to assign
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
             
         Returns:
             Confirmation message
@@ -733,7 +908,6 @@ class OutlookSessionManager:
             # Get available policies dynamically instead of hardcoded
             available_policies = self.get_available_policies()
             
-<<<<<<< HEAD
             # Handle Exchange retention policies (dynamic detection for ANY policy type)
             # Check if the requested policy matches ANY available policy (not just "year" policies)
             matching_policy = None
@@ -849,13 +1023,7 @@ class OutlookSessionManager:
                 # If we found a matching policy, use it as the base for enterprise policy
                 if matching_policy:
                     base_policy_name = matching_policy
-=======
-            # Handle enterprise policy using custom UserProperty (dynamic detection)
-            if (policy_name.lower() == "4-years" or 
-                policy_name.lower() == "4-years (enterprise)" or
-                policy_name.lower().replace(" (enterprise)", "") == "4-years" or
-                any("4-year" in p.lower() for p in available_policies if policy_name.lower() in p.lower())):
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
+                
                 # Add custom property for enterprise policy
                 try:
                     # Check if the policy property already exists
@@ -867,20 +1035,12 @@ class OutlookSessionManager:
                     
                     if policy_prop:
                         # Update existing property
-<<<<<<< HEAD
                         policy_prop.Value = base_policy_name
-=======
-                        policy_prop.Value = policy_name
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
                     else:
                         # Create new property using ItemProperties
                         try:
                             policy_prop = email_item.ItemProperties.Add("enterprise_policy", 1)  # olText
-<<<<<<< HEAD
                             policy_prop.Value = base_policy_name
-=======
-                            policy_prop.Value = policy_name
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
                         except:
                             # If ItemProperties.Add fails, try UserProperties differently
                             # Use a different approach to add custom property
@@ -889,7 +1049,6 @@ class OutlookSessionManager:
                                 # Create a basic custom property
                                 try:
                                     policy_prop = email_item.UserProperties.Add("enterprise_policy", 1, False, 0)
-<<<<<<< HEAD
                                     policy_prop.Value = base_policy_name
                                 except:
                                     # Last resort: use Categories field
@@ -940,39 +1099,20 @@ class OutlookSessionManager:
                             # Method 2: Try with COM date format using the detected pattern
                             import pywintypes
                             import datetime
-                            from datetime import timezone
-                            
-                            # Create timezone-aware datetime using the same pattern
                             future_date = datetime.datetime.now() + datetime.timedelta(days=365*100)
-                            utc_dt = future_date.replace(tzinfo=timezone.utc)
-                            
-                            # Convert to COM date format
-                            com_date = pywintypes.Time(utc_dt)
-                            email_item.ExpiryTime = com_date
-                            logger.info(f"Set ExpiryTime using COM format for enterprise policy")
-                            
+                            expiry_py_time = pywintypes.Time(future_date.timestamp())
+                            email_item.ExpiryTime = expiry_py_time
+                            logger.info(f"Set ExpiryTime using pywintypes for enterprise policy")
                         except Exception as expiry_error2:
                             logger.warning(f"Could not set ExpiryTime (method 1: {str(expiry_error)}, method 2: {str(expiry_error2)})")
                             # Continue anyway - Categories and UserProperty should be sufficient
-=======
-                                    policy_prop.Value = policy_name
-                                except:
-                                    # Last resort: use Categories field
-                                    categories = email_item.Categories or ""
-                                    if "4-years" not in categories:
-                                        new_categories = f"{categories}; 4-years" if categories else "4-years"
-                                        email_item.Categories = new_categories.strip(" ;")
-                            else:
-                                policy_prop.Value = policy_name
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
                     
                     email_item.Save()
-                    logger.info(f"Assigned enterprise policy '{policy_name}' to email: '{email_subject}'")
-                    return f"Successfully assigned enterprise policy '{policy_name}' to email: '{email_subject}'"
+                    logger.info(f"Assigned enterprise policy '{base_policy_name}' to email: '{email_subject}'")
+                    return f"Successfully assigned enterprise policy '{base_policy_name}' to email: '{email_subject}'"
                     
                 except Exception as e:
                     logger.error(f"Error assigning enterprise policy: {str(e)}")
-<<<<<<< HEAD
                     # Fallback to sensitivity if custom property fails - use dynamic fallback
                     try:
                         test_mail = self.outlook.CreateItem(0)
@@ -982,15 +1122,11 @@ class OutlookSessionManager:
                     except:
                         # Last resort fallback
                         email_item.Sensitivity = 0  # Normal
-=======
-                    # Fallback to sensitivity if custom property fails
-                    email_item.Sensitivity = 4  # Private as fallback
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
                     email_item.Save()
                     return f"Assigned fallback policy to email: '{email_subject}' (Enterprise policy assignment failed: {str(e)})"
+
             
             # Map built-in policy names to Outlook sensitivity value (dynamic)
-<<<<<<< HEAD
             # Test sensitivity levels dynamically instead of hardcoding
             policy_map = {}
             
@@ -1028,19 +1164,6 @@ class OutlookSessionManager:
                         policy_map[p.lower()] = 2
                     elif p == "Confidential":
                         policy_map[p.lower()] = 3
-=======
-            policy_map = {
-                "low sensitivity": 1,
-                "personal": 3,
-                "private": 4,
-                "confidential": 5
-            }
-            
-            # Also check available policies for built-in policies
-            for p in available_policies:
-                if p in policy_map:
-                    policy_map[p.lower()] = policy_map[p]
->>>>>>> 15dc00575c7ae4fdfd33672c326880476752b553
             
             policy_name_lower = policy_name.lower()
             sensitivity_value = None

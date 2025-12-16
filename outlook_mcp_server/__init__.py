@@ -11,7 +11,13 @@ from .backend.email_retrieval import (
     search_email_by_body,
     view_email_cache,
     get_email_by_number,
-    list_recent_emails
+    list_recent_emails,
+    get_emails_from_folder
+)
+from .backend.shared import (
+    clear_email_cache,
+    add_email_to_cache,
+    save_email_cache
 )
 from .backend.email_composition import (
     reply_to_email_by_number,
@@ -23,6 +29,45 @@ from .backend.batch_operations import batch_forward_emails
 mcp = FastMCP("outlook-assistant")
 
 # MCP Tools - Imported from outlook_operations
+
+
+@mcp.tool
+def move_folder_tool(source_folder_path: str, target_parent_path: str) -> dict:
+    """Move a folder and all its emails to a new location.
+    
+    Args:
+        source_folder_path: Path to the source folder (e.g., "Inbox/SubFolder1")
+        target_parent_path: Path to the target parent folder (e.g., "Inbox/NewParent")
+    
+    Returns:
+        dict: Response containing confirmation message
+        {
+            "type": "text",
+            "text": "Folder moved successfully from 'source_path' to 'target_path' (X emails moved)"
+        }
+    
+    Note:
+        This tool moves the entire folder structure and all emails contained within it.
+        Cannot be used to move default folders like Inbox, Sent Items, etc.
+    """
+    if not source_folder_path or not isinstance(source_folder_path, str):
+        raise ValueError("Source folder path must be a non-empty string")
+    if not target_parent_path or not isinstance(target_parent_path, str):
+        raise ValueError("Target parent path must be a non-empty string")
+    
+    try:
+        with OutlookSessionManager() as outlook_session:
+            result = outlook_session.move_folder(source_folder_path, target_parent_path)
+            return {
+                "type": "text",
+                "text": result
+            }
+    except Exception as e:
+        return {
+            "type": "text",
+            "text": f"Error moving folder: {str(e)}"
+        }
+
 @mcp.tool
 def get_folder_list_tool() -> dict:
     """Lists all Outlook mail folders as a string representation of a list.
@@ -236,6 +281,55 @@ def view_email_cache_tool(page: int = 1) -> dict:
         }
     """
     result = view_email_cache(page)
+    return {
+        "type": "text",
+        "text": result
+    }
+
+@mcp.tool
+def load_emails_by_folder_tool(folder_path: str, days: int = 7) -> dict:
+    """Load emails from a specific folder into cache.
+    
+    Args:
+        folder_path: Path to the folder (supports nested paths like "Inbox/SubFolder1")
+        days: Number of days to look back (default: 7, max: 30)
+        
+    Returns:
+        dict: Response containing email count message
+        {
+            "type": "text",
+            "text": "Found X emails from last Y days. Use 'view_email_cache_tool' to view them."
+        }
+        
+    Note:
+        - Maximum 30 emails for Inbox folder
+        - Maximum 1000 emails for other folders
+        - Supports 2nd level folder paths (e.g., "Inbox/SubFolder1")
+    """
+    if not folder_path or not isinstance(folder_path, str):
+        raise ValueError("Folder path must be a non-empty string")
+    if not isinstance(days, int) or days < 1 or days > 30:
+        raise ValueError("Days parameter must be an integer between 1 and 30")
+    
+    # Check if it's Inbox folder (case-insensitive)
+    if folder_path.lower() == "inbox":
+        # For Inbox, we'll use the existing get_emails_from_folder but limit to 30
+        emails, note = get_emails_from_folder(folder_name=folder_path, days=days)
+        
+        # If we have more than 30 emails, limit to 30
+        if len(emails) > 30:
+            # Clear cache and reload with limit
+            clear_email_cache()
+            for email in emails[:30]:
+                add_email_to_cache(email['id'], email)
+            save_email_cache()
+            note = " (limited to 30 emails)"
+        
+        result = f"Found {len(emails)} emails from last {days} days. Use 'view_email_cache_tool' to view them.{note}"
+    else:
+        # For non-Inbox folders, use normal loading
+        result = list_recent_emails(folder_name=folder_path, days=days)
+    
     return {
         "type": "text",
         "text": result
@@ -487,7 +581,7 @@ def remove_folder_tool(folder_name: str) -> dict:
     """Remove an existing folder.
     
     Args:
-        folder_name: Name or path of the folder to remove
+        folder_name: Name or path of the folder to remove (supports nested paths like "Inbox/SubFolder1/SubFolder2")
     
     Returns:
         dict: Response containing confirmation message
@@ -518,7 +612,7 @@ def move_email_tool(email_number: int, target_folder_name: str) -> dict:
     
     Args:
         email_number: The number of the email in the cache to move (1-based)
-        target_folder_name: Name or path of the target folder
+        target_folder_name: Name or path of the target folder (supports nested paths like "Inbox/SubFolder1/SubFolder2")
     
     Returns:
         dict: Response containing confirmation message
@@ -537,8 +631,16 @@ def move_email_tool(email_number: int, target_folder_name: str) -> dict:
         raise ValueError("Target folder name must be a non-empty string")
     
     try:
+        # Convert email number to actual email ID from cache
+        if not shared.email_cache:
+            raise ValueError("No emails in cache - load emails first")
+        if email_number < 1 or email_number > len(shared.email_cache):
+            raise ValueError("Invalid email number")
+        
+        email_id = list(shared.email_cache.keys())[email_number - 1]
+        
         with OutlookSessionManager() as outlook_session:
-            result = outlook_session.move_email(email_number, target_folder_name)
+            result = outlook_session.move_email(email_id, target_folder_name)
             return {
                 "type": "text",
                 "text": result
@@ -551,7 +653,7 @@ def move_email_tool(email_number: int, target_folder_name: str) -> dict:
 
 @mcp.tool
 def delete_email_tool(email_number: int) -> dict:
-    """Delete an email.
+    """Move an email to the Deleted Items folder.
     
     Args:
         email_number: The number of the email in the cache to delete (1-based)
@@ -560,18 +662,27 @@ def delete_email_tool(email_number: int) -> dict:
         dict: Response containing confirmation message
         {
             "type": "text",
-            "text": "Email deleted successfully"
+            "text": "Email moved to Deleted Items successfully"
         }
     
     Note:
         Requires emails to be loaded first via list_recent_emails or search_emails.
+        This tool moves the email to the Deleted Items folder instead of permanently deleting it.
     """
     if not isinstance(email_number, int) or email_number < 1:
         raise ValueError("Email number must be a positive integer")
     
     try:
+        # Convert email number to actual email ID from cache
+        if not shared.email_cache:
+            raise ValueError("No emails in cache - load emails first")
+        if email_number < 1 or email_number > len(shared.email_cache):
+            raise ValueError("Invalid email number")
+        
+        email_id = list(shared.email_cache.keys())[email_number - 1]
+        
         with OutlookSessionManager() as outlook_session:
-            result = outlook_session.delete_email(email_number)
+            result = outlook_session.delete_email(email_id)
             return {
                 "type": "text",
                 "text": result
@@ -579,7 +690,7 @@ def delete_email_tool(email_number: int) -> dict:
     except Exception as e:
         return {
             "type": "text",
-            "text": f"Error deleting email: {str(e)}"
+            "text": f"Error moving email to Deleted Items: {str(e)}"
         }
 
 @mcp.tool

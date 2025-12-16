@@ -30,6 +30,7 @@ Talk to your AI assistant like you would to a human:
 - "Find all project updates from the last 2 weeks"
 - "Draft a reply to John about the meeting reschedule"
 - "Summarize this email thread for me"
+- "Forward this meeting invitation to all participants from my contacts.csv"
 
 ### 🔌 **Seamless Integration**
 - Works with any MCP-compatible AI assistant (Claude, GPT, etc.)
@@ -123,6 +124,30 @@ Use this configuration in your MCP client settings:
 **Alternative Installation**: Pre-built distribution files are included in the `dist/` folder:
 ```bash
 pip install dist/outlook_mcp_server-*.whl
+```
+
+## 🧪 Testing & Validation
+
+### Folder Operations Testing
+The MCP server includes comprehensive testing for folder operations:
+
+**Tested Functionality:**
+- ✅ Folder listing and navigation
+- ✅ Email moving between folders (requires full paths)
+- ✅ Folder creation with nested paths
+- ✅ Folder deletion (may require verification)
+- ✅ Email deletion (moves to Deleted Items)
+
+**Testing Scripts Available:**
+- `test_folder_move_enhanced.py` - Tests folder moving functionality
+- `debug_folder_lookup.py` - Debugs folder lookup issues
+
+**Common Testing Patterns:**
+```python
+# Test folder operations
+move_folder_tool("Inbox/TestFolder", "Inbox/Archive")
+create_folder_tool("NewFolder", "Inbox")
+move_email_tool(1, "luomn@cn.ibm.com/Inbox/Processed")
 ```
 
 #### 🔬 **Method 3: Direct Source (Development)** - **For Developers**
@@ -273,6 +298,12 @@ The AI helps you send emails to multiple recipients efficiently:
 - `search_email_by_recipient_name_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by recipient
 - `search_email_by_body_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by body
 
+### Folder Management
+- `move_folder_tool(source_folder_path, target_parent_path)` - Move folders between locations
+- `create_folder_tool(folder_name, parent_folder_name=None)` - Create new folders (supports nested paths like "Inbox/SubFolder1/SubFolder2")
+- `remove_folder_tool(folder_name)` - Delete folders and their contents
+- `move_email_tool(email_number, target_folder_name)` - Move emails between folders (requires full folder path)
+
 ### Email Viewing & Browsing
 - `view_email_cache_tool(page=1)` - View 5 emails per page
 - `get_email_by_number_tool(email_number)` - Get full email details
@@ -296,6 +327,18 @@ The AI helps you send emails to multiple recipients efficiently:
 - All search tools support `match_all=True` (AND logic) or `match_all=False` (OR logic)
 - Email body searching is slower than other fields
 - Search terms can include colons as regular text
+
+## ⚠️ Known Issues & Limitations
+
+### Current Limitations
+- **Folder Level Limitation**: Maximum 3 folder levels supported (e.g., 'Inbox/SubFolder1/SubFolder2'). This affects nested folder creation with mailbox-specific paths.
+- **Folder Deletion Delay**: Deleted folders may require multiple list checks to disappear from the folder list due to Outlook's internal caching.
+- **Full Path Requirements**: Email and folder operations require full mailbox paths (e.g., "luomn@cn.ibm.com/Inbox/FolderName") rather than relative paths.
+
+### Recent Fixes Implemented
+- **Folder Moving**: Fixed COM interface error by using `MoveTo` method instead of `Move`
+- **Email Moving**: Enhanced to support full folder paths for accurate targeting
+- **Error Handling**: Improved error reporting for Outlook operations
 
 ## 🎯 Real-World Examples
 
@@ -334,6 +377,10 @@ python cli_interface.py
 - reply_email - Reply to an email (requires confirmation)
 - compose_email - Create new email (requires confirmation)
 - batch_forward_email - Forward email to multiple recipients from CSV (requires confirmation)
+- move_folder - Move folders between locations
+- create_folder - Create new folders
+- remove_folder - Delete folders
+- move_email - Move emails between folders
 ```
 
 ## � Technical Details

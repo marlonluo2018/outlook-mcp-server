@@ -308,12 +308,6 @@ def get_emails_from_folder(
                                     logger.warning(f"Failed to process recipient: {e}")
                                     continue
                         
-                        # Get folder location from email parent
-                        try:
-                            folder_name = getattr(item.Parent, 'Name', 'Unknown')
-                        except Exception:
-                            folder_name = 'Unknown'
-                        
                         email_data = {
                             'id': getattr(item, 'EntryID', ''),
                             'subject': safe_encode_text(getattr(item, 'Subject', 'No Subject'), 'subject'),
@@ -321,7 +315,6 @@ def get_emails_from_folder(
                             'sender_email': safe_encode_text(getattr(item, 'SenderEmailAddress', ''), 'sender_email'),
                             'received_time': str(received_datetime),
                             'unread': getattr(item, 'UnRead', False),
-                            'folder': folder_name,
                             'to_recipients': to_recipients_list if to_recipients_list else [{'email': safe_encode_text(getattr(item, 'To', ''), 'to_recipients')}],
                             'cc_recipients': cc_recipients_list if cc_recipients_list else [{'email': safe_encode_text(getattr(item, 'CC', ''), 'cc_recipients')}]
                         }
@@ -411,17 +404,41 @@ def search_email_by_body(
 
 
 def list_folders() -> List[str]:
-    """List all available mail folders."""
+    """List all available mail folders with recursive subfolder traversal."""
     with OutlookSessionManager() as session:
         folders = []
+        
+        def traverse_folders(folder, indent_level=0, parent_path=""):
+            """Recursively traverse folders and subfolders.
+            
+            Args:
+                folder: The folder object to traverse
+                indent_level: Current indentation level (0 for top-level folders)
+                parent_path: Full path of the parent folder for building complete paths
+            """
+            # Build the full path for this folder
+            if parent_path:
+                full_path = f"{parent_path}/{folder.Name}"
+            else:
+                full_path = folder.Name
+            
+            # Add current folder with appropriate indentation and full path info
+            if indent_level == 0:
+                # For top-level folders, show both name and full path
+                folders.append(f"{folder.Name} (Full path: {full_path})")
+            else:
+                folders.append("  " * indent_level + f"{folder.Name} (Path: {full_path})")
+            
+            # Recursively process subfolders
+            try:
+                for subfolder in folder.Folders:
+                    traverse_folders(subfolder, indent_level + 1, full_path)
+            except Exception as e:
+                logger.warning(f"Could not list subfolders for {folder.Name}: {e}")
+        
         try:
-            for folder in session.namespace.Folders:
-                folders.append(folder.Name)
-                try:
-                    for subfolder in folder.Folders:
-                        folders.append(f"  {subfolder.Name}")
-                except Exception as e:
-                    logger.warning(f"Could not list subfolders for {folder.Name}: {e}")
+            for root_folder in session.namespace.Folders:
+                traverse_folders(root_folder)
         except Exception as e:
             logger.error(f"Error listing folders: {e}")
             raise
@@ -555,8 +572,7 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
             result += f"Cc: {', '.join(cc_names)}\n"
         
         result += f"Received: {email['received_time']}\n"
-        result += f"Folder: {email.get('folder', 'Unknown')}\n"
-        result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
+        result += f"Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
         result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
     
     if params.page < total_pages:
