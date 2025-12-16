@@ -1,20 +1,28 @@
 # 🤖 Outlook MCP Server: Your AI Email Assistant
 
-**Transform your Outlook inbox with AI-powered email management**
+**Complete Outlook management with AI-powered email, folder, and policy control**
 
 [![Star](https://img.shields.io/github/stars/marlonluo2018/outlook-mcp-server?style=for-the-badge&label=Star%20this%20project&color=yellow)](https://github.com/marlonluo2018/outlook-mcp-server)
 
 > ⭐ **Love this project? Give it a star!** Your support helps us improve and reach more users who need AI email assistance.
 
+### 🎯 **Core Management Features**
+- **📧 Email Management**: AI-powered search, compose, reply, delete, and batch operations
+- **📁 Folder Management**: Intelligent organization, creation, and workflow automation  
+- **🏢 Policy Management**: Enterprise retention and compliance controls
+
 ## 🚀 What is This?
 
-The Outlook MCP Server is your personal AI email assistant that connects Microsoft Outlook with powerful language models. It's not just another email tool - it's your intelligent co-pilot for email management.
+The Outlook MCP Server is your personal AI email assistant that connects Microsoft Outlook with powerful language models. It's not just another email tool - it's your complete Outlook management system with AI-powered email, folder, and policy control.
 
 **Think of it as:**
 - Your personal email analyst that understands your inbox
 - A smart assistant that helps you draft perfect replies
 - An AI-powered search engine for your email history
-- Your email productivity partner
+- Your complete Outlook management partner
+- **Email Management**: Search, compose, reply, delete, and batch operations
+- **Folder Management**: Create, move, and organize with intelligent workflows
+- **Policy Management**: Enterprise-grade retention and compliance controls
 
 ## ✨ Why You'll Love It
 
@@ -30,9 +38,22 @@ Talk to your AI assistant like you would to a human:
 - "Find all project updates from the last 2 weeks"
 - "Draft a reply to John about the meeting reschedule"
 - "Summarize this email thread for me"
+- "Delete this spam email for me"
 - "Forward this meeting invitation to all participants from my contacts.csv"
 
-### 🔌 **Seamless Integration**
+### � **Complete Folder Management**
+- **Smart Organization**: Create, move, and organize folders with AI guidance
+- **Intelligent Workflows**: Discover folder structure before operations
+- **Nested Support**: Handle complex folder hierarchies up to 3 levels deep
+- **Bulk Operations**: Move emails and folders efficiently
+
+### 🏢 **Enterprise Policy Management**
+- **Retention Policies**: Assign Exchange retention policies to emails
+- **Compliance Controls**: Enterprise-grade policy assignment and verification
+- **Policy Discovery**: Browse available policies before assignment
+- **Multi-method Support**: Multiple assignment approaches for compatibility
+
+### �🔌 **Seamless Integration**
 - Works with any MCP-compatible AI assistant (Claude, GPT, etc.)
 - Direct integration with Microsoft Outlook
 - No complicated setup - just install and connect
@@ -126,49 +147,35 @@ Use this configuration in your MCP client settings:
 pip install dist/outlook_mcp_server-*.whl
 ```
 
-## 🧪 Testing & Validation
-
-### Folder Operations Testing
-The MCP server includes comprehensive testing for folder operations:
-
-**Tested Functionality:**
-- ✅ Folder listing and navigation
-- ✅ Email moving between folders (requires full paths)
-- ✅ Folder creation with nested paths
-- ✅ Folder deletion (may require verification)
-- ✅ Email deletion (moves to Deleted Items)
-
-**Testing Scripts Available:**
-- `test_folder_move_enhanced.py` - Tests folder moving functionality
-- `debug_folder_lookup.py` - Debugs folder lookup issues
-
-**Common Testing Patterns:**
-```python
-# Test folder operations (proper workflow)
-folder_list = get_folder_list_tool()  # Step 1: Discover folder structure
-move_folder_tool("Inbox/TestFolder", "Inbox/Archive")  # Step 2: Use discovered paths
-create_folder_tool("NewFolder", "Inbox")
-move_email_tool(1, "user@company.com/Inbox/Processed")  # Use full path from discovery
-
-# Test policy operations (proper workflow)
-policies = get_policies_tool()  # Step 1: Discover available policies
-assign_policy_tool(1, "1 Year (Enterprise)")  # Step 2: Use exact policy name from discovery
-assigned_policies = get_email_policies_tool(1)  # Step 3: Verify assignment
-```
-
-**Testing Workflow Guidelines:**
-- **Always discover first**: Use `get_folder_list_tool()` before folder operations
-- **Use exact paths**: Copy folder paths exactly from discovery results
-- **Policy discovery**: Use `get_policies_tool()` before policy assignment
-- **Verify operations**: Use appropriate verification tools after operations
-
 #### 🔬 **Method 3: Direct Source (Development)** - **For Developers**
 **Purpose**: For developers who want to modify the code or run directly from source without building
 
-**Configuration Files Available**:
-- `mcp-config-uvx.json` - Recommended for most users
-- `mcp-config-python.json` - For pip installations  
-- `mcp-config-direct.json` - For direct source execution
+**Step 1: Clone and Run Directly**
+```bash
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run directly from source
+python outlook_mcp_server/__main__.py
+```
+
+**Step 2: Configure Your AI Assistant**
+Use this configuration in your MCP client settings:
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "python",
+      "args": ["outlook_mcp_server/__main__.py"]
+    }
+  }
+}
+```
+
+**Quick Setup**: Use the provided `mcp-config-direct.json` file
 
 ## 🤖 AI Assistant System Prompt
 
@@ -300,6 +307,7 @@ The AI helps you send emails to multiple recipients efficiently:
 ### Email Viewing & Browsing
 - `view_email_cache_tool(page=1)` - View 5 emails per page
 - `get_email_by_number_tool(email_number)` - Get full email details
+- `delete_email_tool(email_number)` - Move email to Deleted Items folder (soft delete)
 
 ### Email Composition (Requires User Confirmation)
 - `reply_to_email_by_number_tool(email_number, reply_text, to_recipients=None, cc_recipients=None)` - Reply to email
@@ -315,6 +323,24 @@ The AI helps you send emails to multiple recipients efficiently:
 - Adds custom text before the original email content
 - Preserves email formatting with consistent break lines
 - Sends via BCC to protect recipient privacy
+
+### Policy Management (Enterprise Features)
+**⚠️ Important Workflow**: For policy operations, always start with `get_policies_tool()` to discover available policies first.
+
+- `get_policies_tool()` - **REQUIRED FIRST STEP** - Discover available Exchange retention policies
+- `assign_policy_tool(email_number, policy_name)` - Assign a policy to an email (use exact policy name from discovery)
+- `get_email_policies_tool(email_number)` - Verify which policies are assigned to an email
+
+**Policy Management Workflow:**
+1. **Discover Policies**: Use `get_policies_tool()` to see available enterprise policies
+2. **Assign Policy**: Use `assign_policy_tool()` with the exact policy name from discovery
+3. **Verify Assignment**: Use `get_email_policies_tool()` to confirm the policy was applied
+
+**Policy Operation Guidelines:**
+- **Policy Names**: Use exact names from `get_policies_tool()` (e.g., "1 Year (Enterprise)", "Never Delete")
+- **Email Selection**: Policies are assigned to specific emails by their cache number
+- **Enterprise Requirement**: Policy features require Exchange/Office 365 enterprise accounts
+- **Assignment Methods**: The system tries multiple methods (direct properties, categories, user properties)
 
 **Search Behavior:**
 - All search tools support `match_all=True` (AND logic) or `match_all=False` (OR logic)
