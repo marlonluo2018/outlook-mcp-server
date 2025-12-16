@@ -308,12 +308,6 @@ def get_emails_from_folder(
                                     logger.warning(f"Failed to process recipient: {e}")
                                     continue
                         
-                        # Get folder location from email parent
-                        try:
-                            folder_name = getattr(item.Parent, 'Name', 'Unknown')
-                        except Exception:
-                            folder_name = 'Unknown'
-                        
                         email_data = {
                             'id': getattr(item, 'EntryID', ''),
                             'subject': safe_encode_text(getattr(item, 'Subject', 'No Subject'), 'subject'),
@@ -321,7 +315,6 @@ def get_emails_from_folder(
                             'sender_email': safe_encode_text(getattr(item, 'SenderEmailAddress', ''), 'sender_email'),
                             'received_time': str(received_datetime),
                             'unread': getattr(item, 'UnRead', False),
-                            'folder': folder_name,
                             'to_recipients': to_recipients_list if to_recipients_list else [{'email': safe_encode_text(getattr(item, 'To', ''), 'to_recipients')}],
                             'cc_recipients': cc_recipients_list if cc_recipients_list else [{'email': safe_encode_text(getattr(item, 'CC', ''), 'cc_recipients')}]
                         }
@@ -555,7 +548,6 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
             result += f"Cc: {', '.join(cc_names)}\n"
         
         result += f"Received: {email['received_time']}\n"
-        result += f"Folder: {email.get('folder', 'Unknown')}\n"
         result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
         result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
     
