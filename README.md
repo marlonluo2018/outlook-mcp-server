@@ -144,41 +144,26 @@ The MCP server includes comprehensive testing for folder operations:
 
 **Common Testing Patterns:**
 ```python
-# Test folder operations
-move_folder_tool("Inbox/TestFolder", "Inbox/Archive")
+# Test folder operations (proper workflow)
+folder_list = get_folder_list_tool()  # Step 1: Discover folder structure
+move_folder_tool("Inbox/TestFolder", "Inbox/Archive")  # Step 2: Use discovered paths
 create_folder_tool("NewFolder", "Inbox")
-move_email_tool(1, "luomn@cn.ibm.com/Inbox/Processed")
+move_email_tool(1, "user@company.com/Inbox/Processed")  # Use full path from discovery
+
+# Test policy operations (proper workflow)
+policies = get_policies_tool()  # Step 1: Discover available policies
+assign_policy_tool(1, "1 Year (Enterprise)")  # Step 2: Use exact policy name from discovery
+assigned_policies = get_email_policies_tool(1)  # Step 3: Verify assignment
 ```
+
+**Testing Workflow Guidelines:**
+- **Always discover first**: Use `get_folder_list_tool()` before folder operations
+- **Use exact paths**: Copy folder paths exactly from discovery results
+- **Policy discovery**: Use `get_policies_tool()` before policy assignment
+- **Verify operations**: Use appropriate verification tools after operations
 
 #### 🔬 **Method 3: Direct Source (Development)** - **For Developers**
 **Purpose**: For developers who want to modify the code or run directly from source without building
-
-**Step 1: Clone and Install Dependencies**
-```bash
-git clone https://github.com/marlonluo2018/outlook-mcp-server.git
-cd outlook-mcp-server
-
-# Install required Python dependencies
-pip install -r requirements.txt
-
-# Run directly from source
-python outlook_mcp_server/__main__.py
-```
-
-**Step 2: Configure Your AI Assistant**
-Use this configuration in your MCP client settings:
-```json
-{
-  "mcpServers": {
-    "outlook-mcp-server": {
-      "command": "python",
-      "args": ["outlook_mcp_server/__main__.py"]
-    }
-  }
-}
-```
-
-**Quick Setup**: Use the provided `mcp-config-direct.json` file
 
 **Configuration Files Available**:
 - `mcp-config-uvx.json` - Recommended for most users
@@ -299,10 +284,18 @@ The AI helps you send emails to multiple recipients efficiently:
 - `search_email_by_body_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by body
 
 ### Folder Management
-- `move_folder_tool(source_folder_path, target_parent_path)` - Move folders between locations
+**⚠️ Important Workflow**: For folder operations, always start with `get_folder_list_tool()` to discover the folder structure first.
+
+- `get_folder_list_tool()` - **REQUIRED FIRST STEP** - Lists all Outlook mail folders to understand structure
+- `move_folder_tool(source_folder_path, target_parent_path)` - Move folders between locations (use full paths from folder list)
 - `create_folder_tool(folder_name, parent_folder_name=None)` - Create new folders (supports nested paths like "Inbox/SubFolder1/SubFolder2")
-- `remove_folder_tool(folder_name)` - Delete folders and their contents
-- `move_email_tool(email_number, target_folder_name)` - Move emails between folders (requires full folder path)
+- `remove_folder_tool(folder_name)` - Delete folders and their contents (use full path from folder list)
+- `move_email_tool(email_number, target_folder_name)` - Move emails between folders (requires full folder path from folder list)
+
+**Folder Operation Workflow:**
+1. **Discover Structure**: Use `get_folder_list_tool()` to see available folders
+2. **Identify Paths**: Note the full folder paths (e.g., "user@company.com/Inbox/FolderName")
+3. **Execute Operation**: Use the appropriate tool with the correct full path
 
 ### Email Viewing & Browsing
 - `view_email_cache_tool(page=1)` - View 5 emails per page
@@ -333,7 +326,7 @@ The AI helps you send emails to multiple recipients efficiently:
 ### Current Limitations
 - **Folder Level Limitation**: Maximum 3 folder levels supported (e.g., 'Inbox/SubFolder1/SubFolder2'). This affects nested folder creation with mailbox-specific paths.
 - **Folder Deletion Delay**: Deleted folders may require multiple list checks to disappear from the folder list due to Outlook's internal caching.
-- **Full Path Requirements**: Email and folder operations require full mailbox paths (e.g., "luomn@cn.ibm.com/Inbox/FolderName") rather than relative paths.
+- **Full Path Requirements**: Email and folder operations require full mailbox paths (e.g., "user@company.com/Inbox/FolderName") rather than relative paths.
 
 ### Recent Fixes Implemented
 - **Folder Moving**: Fixed COM interface error by using `MoveTo` method instead of `Move`

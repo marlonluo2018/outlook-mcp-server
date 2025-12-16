@@ -144,7 +144,7 @@ class OutlookSessionManager:
                 
                 # Check if first part looks like an email address (mailbox-specific path)
                 if '@' in path_parts[0] and '.' in path_parts[0]:
-                    # This is a mailbox-specific path like "luomn@cn.ibm.com/Inbox/Folder"
+                    # This is a mailbox-specific path like "user@company.com/Inbox/Folder"
                     mailbox_name = path_parts[0]
                     
                     # Find the mailbox folder
