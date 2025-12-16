@@ -126,42 +126,6 @@ Use this configuration in your MCP client settings:
 pip install dist/outlook_mcp_server-*.whl
 ```
 
-## 🧪 Testing & Validation
-
-### Folder Operations Testing
-The MCP server includes comprehensive testing for folder operations:
-
-**Tested Functionality:**
-- ✅ Folder listing and navigation
-- ✅ Email moving between folders (requires full paths)
-- ✅ Folder creation with nested paths
-- ✅ Folder deletion (may require verification)
-- ✅ Email deletion (moves to Deleted Items)
-
-**Testing Scripts Available:**
-- `test_folder_move_enhanced.py` - Tests folder moving functionality
-- `debug_folder_lookup.py` - Debugs folder lookup issues
-
-**Common Testing Patterns:**
-```python
-# Test folder operations (proper workflow)
-folder_list = get_folder_list_tool()  # Step 1: Discover folder structure
-move_folder_tool("Inbox/TestFolder", "Inbox/Archive")  # Step 2: Use discovered paths
-create_folder_tool("NewFolder", "Inbox")
-move_email_tool(1, "user@company.com/Inbox/Processed")  # Use full path from discovery
-
-# Test policy operations (proper workflow)
-policies = get_policies_tool()  # Step 1: Discover available policies
-assign_policy_tool(1, "1 Year (Enterprise)")  # Step 2: Use exact policy name from discovery
-assigned_policies = get_email_policies_tool(1)  # Step 3: Verify assignment
-```
-
-**Testing Workflow Guidelines:**
-- **Always discover first**: Use `get_folder_list_tool()` before folder operations
-- **Use exact paths**: Copy folder paths exactly from discovery results
-- **Policy discovery**: Use `get_policies_tool()` before policy assignment
-- **Verify operations**: Use appropriate verification tools after operations
-
 #### 🔬 **Method 3: Direct Source (Development)** - **For Developers**
 **Purpose**: For developers who want to modify the code or run directly from source without building
 
@@ -315,6 +279,24 @@ The AI helps you send emails to multiple recipients efficiently:
 - Adds custom text before the original email content
 - Preserves email formatting with consistent break lines
 - Sends via BCC to protect recipient privacy
+
+### Policy Management (Enterprise Features)
+**⚠️ Important Workflow**: For policy operations, always start with `get_policies_tool()` to discover available policies first.
+
+- `get_policies_tool()` - **REQUIRED FIRST STEP** - Discover available Exchange retention policies
+- `assign_policy_tool(email_number, policy_name)` - Assign a policy to an email (use exact policy name from discovery)
+- `get_email_policies_tool(email_number)` - Verify which policies are assigned to an email
+
+**Policy Management Workflow:**
+1. **Discover Policies**: Use `get_policies_tool()` to see available enterprise policies
+2. **Assign Policy**: Use `assign_policy_tool()` with the exact policy name from discovery
+3. **Verify Assignment**: Use `get_email_policies_tool()` to confirm the policy was applied
+
+**Policy Operation Guidelines:**
+- **Policy Names**: Use exact names from `get_policies_tool()` (e.g., "1 Year (Enterprise)", "Never Delete")
+- **Email Selection**: Policies are assigned to specific emails by their cache number
+- **Enterprise Requirement**: Policy features require Exchange/Office 365 enterprise accounts
+- **Assignment Methods**: The system tries multiple methods (direct properties, categories, user properties)
 
 **Search Behavior:**
 - All search tools support `match_all=True` (AND logic) or `match_all=False` (OR logic)
