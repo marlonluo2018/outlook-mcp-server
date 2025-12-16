@@ -4,6 +4,7 @@ from typing import Optional
 MAX_DAYS = 30
 MAX_EMAILS = 1000
 MAX_LOAD_TIME = 58  # seconds
+LAZY_LOADING_ENABLED = True  # Enable lazy loading for email details
 
 # Connection configuration
 CONNECT_TIMEOUT = 30  # seconds
@@ -20,8 +21,9 @@ from datetime import datetime, timedelta
 CACHE_BASE_DIR = os.path.join(
     os.getenv("LOCALAPPDATA", os.path.expanduser("~")), "outlook_mcp_server"
 )
-CACHE_EXPIRY_HOURS = 1  # Cache expires after 1 hour
+CACHE_EXPIRY_HOURS = 6  # Cache expires after 6 hours
 MAX_CACHE_SIZE = 1000  # Maximum number of emails to keep in cache
+BATCH_SAVE_SIZE = 10  # Save cache after every N emails instead of every email
 
 # Global cache storage
 email_cache = {}
@@ -45,7 +47,7 @@ def add_email_to_cache(email_id: str, email_data: dict):
     """Add an email to the cache with size management.
 
     Args:
-        email_id: The unique identifier for the email
+        email_id: The unique identifier for email
         email_data: The email data to store in the cache
     """
     global email_cache, email_cache_order
@@ -67,21 +69,37 @@ def add_email_to_cache(email_id: str, email_data: dict):
         del email_cache[oldest_id]  # Remove from cache
 
 
-def save_email_cache():
-    """Save the email cache to disk."""
+def save_email_cache(force_save=False):
+    """Save the email cache to disk with optional batching.
+    
+    Args:
+        force_save: If True, save immediately regardless of batch size
+    """
     try:
         _ensure_cache_dir_exists()
 
+        # Initialize counter if not exists
+        if not hasattr(save_email_cache, '_pending_save_count'):
+            save_email_cache._pending_save_count = 0
+        
         # Only save if we have cache data
         if email_cache:
-            cache_data = {
-                "cache": email_cache,
-                "cache_order": email_cache_order,
-                "timestamp": datetime.now().isoformat(),
-            }
+            save_email_cache._pending_save_count += 1
+            
+            # Save only if forced or reached batch size
+            if force_save or save_email_cache._pending_save_count >= BATCH_SAVE_SIZE:
+                cache_data = {
+                    "cache": email_cache,
+                    "cache_order": email_cache_order,
+                    "timestamp": datetime.now().isoformat(),
+                }
 
-            with open(_get_cache_file(), "w", encoding="utf-8") as f:
-                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+                with open(_get_cache_file(), "w", encoding="utf-8") as f:
+                    json.dump(cache_data, f, ensure_ascii=False, indent=2)
+                
+                # Reset counter after successful save
+                save_email_cache._pending_save_count = 0
+                
     except Exception as e:
         import logging
 
@@ -135,7 +153,7 @@ def get_email_from_cache(email_number: int) -> Optional[dict]:
     """Get an email from cache by its cache number (1-based).
 
     Args:
-        email_number: The 1-based position of the email in the cache
+        email_number: The 1-based position of email in the cache
 
     Returns:
         The email data dictionary, or None if not found

@@ -3,13 +3,14 @@
 from datetime import datetime, timedelta, timezone
 import time
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 
 from .outlook_session import OutlookSessionManager
 from .shared import (
     MAX_DAYS,
     MAX_EMAILS,
     MAX_LOAD_TIME,
+    LAZY_LOADING_ENABLED,
     email_cache,
     save_email_cache,
     clear_email_cache,
@@ -61,7 +62,7 @@ def _unified_search(
     folder_name: Optional[str] = None,
     match_all: bool = True,
     search_field: str = "subject",
-) -> Tuple[List[Dict], str]:
+) -> Tuple[List[Dict[str, Any]], str]:
     """Unified search function with field-specific filtering.
 
     Args:
@@ -132,7 +133,7 @@ def get_emails_from_folder(
     recipient_filter_only: bool = False,
     subject_filter_only: bool = False,
     body_filter_only: bool = False,
-) -> Tuple[List[Dict], str]:
+) -> Tuple[List[Dict[str, Any]], str]:
     """Retrieve emails from specified folder with batch processing and timeout.
 
     Args:
@@ -195,9 +196,7 @@ def get_emails_from_folder(
                         field_filter = "subject"  # default
 
                     # Build optimized filter using utility function
-                    filter_str = build_dasl_filter(
-                        search_terms, threshold_date, field_filter, match_all
-                    )
+                    filter_str = build_dasl_filter(search_terms, threshold_date, field_filter, match_all)
                     folder_items = folder_items.Restrict(filter_str)
                     logger.info(
                         f"Applied DASL filter for {field_filter}: {len(search_terms)} terms"
@@ -241,7 +240,8 @@ def get_emails_from_folder(
                                 received_datetime = received_time
                             else:
                                 received_datetime = datetime.strptime(
-                                    received_time.strftime("%Y-%m-%d %H:%M:%S"), "%Y-%m-%d %H:%M:%S"
+                                    received_time.strftime("%Y-%m-%d %H:%M:%S"),
+                                    "%Y-%m-%d %H:%M:%S",
                                 )
                         except Exception as date_error:
                             logger.warning(
@@ -264,108 +264,79 @@ def get_emails_from_folder(
                         sender_name = sender_name.split(",")[0].strip()
                         sender_name = " ".join(sender_name.split())
 
-                        # Extract actual email addresses and display names from Recipients collection
+                        # Simplified recipient processing to reduce COM overhead
                         to_recipients_list = []
                         cc_recipients_list = []
 
                         if hasattr(item, "Recipients"):
-                            for recipient in item.Recipients:
-                                try:
-                                    if hasattr(recipient, "AddressEntry"):
-                                        address_entry = recipient.AddressEntry
+                            # Simplified recipient processing to reduce Exchange queries
+                            try:
+                                # Get basic recipient information without extensive Exchange queries
+                                to_addresses = safe_encode_text(
+                                    getattr(item, "To", ""), "to_recipients"
+                                )
+                                cc_addresses = safe_encode_text(
+                                    getattr(item, "CC", ""), "cc_recipients"
+                                )
 
-                                        # Initialize recipient data
-                                        email_address = None
-                                        display_name = None
+                                # Parse and add TO recipients (simplified approach)
+                                if to_addresses:
+                                    for addr in to_addresses.split(";"):
+                                        addr = addr.strip()
+                                        if addr:
+                                            if "@" in addr and not addr.startswith("/"):
+                                                to_recipients_list.append({"email": addr})
+                                            else:
+                                                to_recipients_list.append({"display_name": addr})
 
-                                        # Try to get display name
-                                        if hasattr(address_entry, "Name"):
-                                            display_name = safe_encode_text(
-                                                address_entry.Name, "recipient_name"
-                                            )
+                                # Parse and add CC recipients (simplified approach)
+                                if cc_addresses:
+                                    for addr in cc_addresses.split(";"):
+                                        addr = addr.strip()
+                                        if addr:
+                                            if "@" in addr and not addr.startswith("/"):
+                                                cc_recipients_list.append({"email": addr})
+                                            else:
+                                                cc_recipients_list.append({"display_name": addr})
 
-                                        # Try to get SMTP email address for Exchange users
-                                        if hasattr(address_entry, "GetExchangeUser"):
-                                            try:
-                                                exchange_user = address_entry.GetExchangeUser()
-                                                if exchange_user and hasattr(
-                                                    exchange_user, "PrimarySmtpAddress"
-                                                ):
-                                                    email_address = safe_encode_text(
-                                                        exchange_user.PrimarySmtpAddress,
-                                                        "recipient_email",
-                                                    )
-                                            except Exception as e:
-                                                logger.debug(f"Failed to get Exchange user: {e}")
+                            except Exception as e:
+                                logger.debug(f"Failed to process recipients with simplified method: {e}")
+                                # Fallback to minimal recipient info
+                                to_recipients_list = [
+                                    {"email": safe_encode_text(getattr(item, "To", ""), "to_recipients")}
+                                ]
+                                cc_recipients_list = [
+                                    {"email": safe_encode_text(getattr(item, "CC", ""), "cc_recipients")}
+                                ]
 
-                                        # Fallback to Address if Exchange user failed
-                                        if not email_address and hasattr(address_entry, "Address"):
-                                            address = safe_encode_text(
-                                                address_entry.Address, "recipient_address"
-                                            )
-                                            # Check if it's a valid SMTP email address
-                                            if "@" in address and not address.startswith("/"):
-                                                email_address = address
-
-                                        # Create recipient entry with both display name and email if available
-                                        recipient_data = {}
-
-                                        # Add display name if available
-                                        if display_name:
-                                            recipient_data["display_name"] = display_name
-
-                                        # Add email address if available
-                                        if email_address:
-                                            recipient_data["email"] = email_address
-
-                                        # Only add if we have at least one piece of information
-                                        if recipient_data:
-                                            if recipient.Type == 1:  # To recipient
-                                                to_recipients_list.append(recipient_data)
-                                            elif recipient.Type == 2:  # CC recipient
-                                                cc_recipients_list.append(recipient_data)
-
-                                except Exception as e:
-                                    logger.warning(f"Failed to process recipient: {e}")
-                                    continue
-
+                        # Optimized email data extraction - only essential fields for listing
                         email_data = {
                             "id": getattr(item, "EntryID", ""),
                             "subject": safe_encode_text(
                                 getattr(item, "Subject", "No Subject"), "subject"
                             ),
                             "sender": sender_name,
-                            "sender_email": safe_encode_text(
-                                getattr(item, "SenderEmailAddress", ""), "sender_email"
-                            ),
                             "received_time": str(received_datetime),
                             "unread": getattr(item, "UnRead", False),
-                            "to_recipients": (
-                                to_recipients_list
-                                if to_recipients_list
-                                else [
-                                    {
-                                        "email": safe_encode_text(
-                                            getattr(item, "To", ""), "to_recipients"
-                                        )
-                                    }
-                                ]
-                            ),
-                            "cc_recipients": (
-                                cc_recipients_list
-                                if cc_recipients_list
-                                else [
-                                    {
-                                        "email": safe_encode_text(
-                                            getattr(item, "CC", ""), "cc_recipients"
-                                        )
-                                    }
-                                ]
-                            ),
+                            # Store recipients in simplified format for faster processing
+                            "to_recipients": to_recipients_list,
+                            "cc_recipients": cc_recipients_list,
+                            # Lazy load these fields when needed
+                            "sender_email": "",
+                            "has_attachments": getattr(item, "Attachments", None)
+                            and getattr(item, "Attachments").Count > 0,
+                            "size": getattr(item, "Size", 0),
                         }
 
                         emails.append(email_data)
-                        add_email_to_cache(email_data["id"], email_data)
+                        # Ensure email_id is string for cache key
+                        email_id = (
+                            str(email_data["id"])
+                            if email_data["id"] is not None
+                            else f"email_{i}"
+                        )
+                        add_email_to_cache(email_id, email_data)
+                        # Save cache in batches instead of every email
                         save_email_cache()
 
                     except Exception as e:
@@ -379,6 +350,9 @@ def get_emails_from_folder(
                     logger.info(
                         f"Completed with {failed_count} failed emails out of {processed_count} processed"
                     )
+
+                # Force save cache at the end of processing to ensure all emails are saved
+                save_email_cache(force_save=True)
 
                 return emails[:MAX_EMAILS], limit_note
 
@@ -411,28 +385,28 @@ def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> str:
 
 def search_email_by_subject(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> Tuple[List[Dict], str]:
+) -> Tuple[List[Dict[str, Any]], str]:
     """Search emails by subject and return list of emails with note."""
     return _unified_search(search_term, days, folder_name, match_all, "subject")
 
 
 def search_email_by_from(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> Tuple[List[Dict], str]:
+) -> Tuple[List[Dict[str, Any]], str]:
     """Search emails by sender name and return list of emails with note."""
     return _unified_search(search_term, days, folder_name, match_all, "sender")
 
 
 def search_email_by_to(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> Tuple[List[Dict], str]:
+) -> Tuple[List[Dict[str, Any]], str]:
     """Search emails by recipient name and return list of emails with note."""
     return _unified_search(search_term, days, folder_name, match_all, "recipient")
 
 
 def search_email_by_body(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> Tuple[List[Dict], str]:
+) -> Tuple[List[Dict[str, Any]], str]:
     """Search emails by body content and return list of emails with note."""
     return _unified_search(search_term, days, folder_name, match_all, "body")
 
@@ -465,22 +439,31 @@ def list_folders() -> List[str]:
 
             # Recursively process subfolders
             try:
-                for subfolder in folder.Folders:
-                    traverse_folders(subfolder, indent_level + 1, full_path)
+                # Check if folder has Folders collection
+                if folder and hasattr(folder, 'Folders') and folder.Folders:
+                    for subfolder in folder.Folders:
+                        traverse_folders(subfolder, indent_level + 1, full_path)
+                else:
+                    logger.debug(f"No subfolders collection available for folder: {getattr(folder, 'Name', 'Unknown')}")
             except Exception as e:
-                logger.warning(f"Could not list subfolders for {folder.Name}: {e}")
+                logger.warning(f"Could not list subfolders for {getattr(folder, 'Name', 'Unknown')}: {e}")
 
         try:
-            for root_folder in session.namespace.Folders:
-                traverse_folders(root_folder)
+            # Check if Folders collection exists
+            if session.namespace and hasattr(session.namespace, 'Folders') and session.namespace.Folders:
+                for root_folder in session.namespace.Folders:
+                    traverse_folders(root_folder)
+            else:
+                logger.warning("No folders collection available in namespace")
         except Exception as e:
             logger.error(f"Error listing folders: {e}")
             raise
         return folders
 
 
-def get_email_by_number(email_number: int) -> Optional[Dict]:
-    """Get detailed information for a specific email by its position in cache (1-based index)."""
+def get_email_by_number(email_number: int) -> Optional[Dict[str, Any]]:
+    """Get detailed information for a specific email by its position in cache (1-based index).
+    Implements lazy loading for better performance."""
     if not isinstance(email_number, int) or email_number < 1:
         logger.warning(f"Invalid email number: {email_number}")
         return None
@@ -504,15 +487,41 @@ def get_email_by_number(email_number: int) -> Optional[Dict]:
     else:
         sender_name = str(sender)
 
+    # Check if we have all the details already cached
+    if "body" in email and "attachments" in email:
+        # Return cached full details
+        filtered_email = {
+            "id": email.get("id", ""),
+            "subject": email.get("subject", "No Subject"),
+            "sender": sender_name,
+            "received_time": email.get("received_time", ""),
+            "unread": email.get("unread", False),
+            "has_attachments": email.get("has_attachments", False),
+            "size": email.get("size", 0),
+            "body": email.get("body", ""),
+            "to": (
+                ", ".join([_format_recipient_for_display(r) for r in email.get("to_recipients", [])])
+                if email.get("to_recipients")
+                else ""
+            ),
+            "cc": (
+                ", ".join([_format_recipient_for_display(r) for r in email.get("cc_recipients", [])])
+                if email.get("cc_recipients")
+                else ""
+            ),
+            "attachments": email.get("attachments", []),
+        }
+        return filtered_email
+
+    # Otherwise, create basic email entry and lazy load details
     filtered_email = {
-        "id": email.get("id", ""),  # Include email ID for policy retrieval
+        "id": email.get("id", ""),
         "subject": email.get("subject", "No Subject"),
         "sender": sender_name,
         "received_time": email.get("received_time", ""),
         "unread": email.get("unread", False),
         "has_attachments": email.get("has_attachments", False),
         "size": email.get("size", 0),
-        "body": email.get("body", ""),
         "to": (
             ", ".join([_format_recipient_for_display(r) for r in email.get("to_recipients", [])])
             if email.get("to_recipients")
@@ -523,44 +532,62 @@ def get_email_by_number(email_number: int) -> Optional[Dict]:
             if email.get("cc_recipients")
             else ""
         ),
-        "attachments": email.get("attachments", []),
     }
 
-    # If email has full details already, return filtered version
-    if "body" in email and "attachments" in email:
-        return filtered_email
-
-    # Otherwise fetch full details from Outlook
-    with OutlookSessionManager() as session:
-        try:
+    # Lazy load full details from Outlook only when requested
+    try:
+        with OutlookSessionManager() as session:
+            # Check if namespace is available before using it
+            if not session or not session.namespace:
+                logger.error("Failed to establish Outlook session or namespace")
+                return None
+                
+            if not hasattr(session.namespace, 'GetItemFromID'):
+                logger.error("Namespace does not have GetItemFromID method")
+                return None
+                
             item = session.namespace.GetItemFromID(email["id"])
+            if not item:
+                logger.warning(f"Email with ID {email['id'][:20]}... not found")
+                return None
+                
             if item.Class != OutlookItemClass.MAIL_ITEM:
                 logger.warning(f"Email {email_number} is not a mail item")
                 return None
 
-            filtered_email.update(
-                {
-                    "body": safe_encode_text(getattr(item, "Body", ""), "body"),
-                    "attachments": (
-                        [
-                            {
-                                "name": safe_encode_text(attach.FileName, "attachment_name"),
-                                "size": attach.Size,
-                            }
-                            for attach in item.Attachments
-                        ]
-                        if hasattr(item, "Attachments")
-                        else []
-                    ),
-                }
-            )
+            # Extract detailed information
+            body = safe_encode_text(getattr(item, "Body", ""), "body")
+            attachments = []
+            if hasattr(item, "Attachments"):
+                try:
+                    attachments = [
+                        {
+                            "name": safe_encode_text(attach.FileName, "attachment_name"),
+                            "size": attach.Size,
+                        }
+                        for attach in item.Attachments
+                    ]
+                except Exception as e:
+                    logger.warning(f"Failed to extract attachments: {e}")
+
+            # Add detailed information
+            filtered_email["body"] = body
+            filtered_email["attachments"] = attachments
+
+            # Optional: Cache the full details for future requests
+            email["body"] = body
+            email["attachments"] = attachments
+            save_email_cache(force_save=False)  # Save updated cache with full details
 
             logger.info(f"Retrieved full details for email #{email_number}")
             return filtered_email
 
-        except Exception as e:
-            logger.error(f"Error fetching email details for #{email_number}: {e}")
-            return None
+    except Exception as e:
+        logger.error(f"Error fetching email details for #{email_number}: {e}")
+        # Return basic information even if detailed fetch failed
+        filtered_email["body"] = "Error loading body content"
+        filtered_email["attachments"] = []
+        return filtered_email
 
 
 # Keep alias for backward compatibility
