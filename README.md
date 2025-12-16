@@ -150,10 +150,32 @@ pip install dist/outlook_mcp_server-*.whl
 #### 🔬 **Method 3: Direct Source (Development)** - **For Developers**
 **Purpose**: For developers who want to modify the code or run directly from source without building
 
-**Configuration Files Available**:
-- `mcp-config-uvx.json` - Recommended for most users
-- `mcp-config-python.json` - For pip installations  
-- `mcp-config-direct.json` - For direct source execution
+**Step 1: Clone and Run Directly**
+```bash
+git clone https://github.com/marlonluo2018/outlook-mcp-server.git
+cd outlook-mcp-server
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run directly from source
+python outlook_mcp_server/__main__.py
+```
+
+**Step 2: Configure Your AI Assistant**
+Use this configuration in your MCP client settings:
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "python",
+      "args": ["outlook_mcp_server/__main__.py"]
+    }
+  }
+}
+```
+
+**Quick Setup**: Use the provided `mcp-config-direct.json` file
 
 ## 🤖 AI Assistant System Prompt
 
