@@ -572,7 +572,7 @@ def view_email_cache(page: int = 1, per_page: int = 5) -> str:
             result += f"Cc: {', '.join(cc_names)}\n"
         
         result += f"Received: {email['received_time']}\n"
-        result += f"Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
+        result += f"Read Status: {'Read' if not email.get('unread', False) else 'Unread'}\n"
         result += f"Has Attachments: {'Yes' if email.get('has_attachments', False) else 'No'}\n\n"
     
     if params.page < total_pages:
