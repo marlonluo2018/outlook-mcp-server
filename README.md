@@ -7,7 +7,7 @@
 > ⭐ **Love this project? Give it a star!** Your support helps us improve and reach more users who need AI email assistance.
 
 ### 🎯 **Core Management Features**
-- **📧 Email Management**: AI-powered search, compose, reply, and batch operations
+- **📧 Email Management**: AI-powered search, compose, reply, delete, and batch operations
 - **📁 Folder Management**: Intelligent organization, creation, and workflow automation  
 - **🏢 Policy Management**: Enterprise retention and compliance controls
 
@@ -20,7 +20,7 @@ The Outlook MCP Server is your personal AI email assistant that connects Microso
 - A smart assistant that helps you draft perfect replies
 - An AI-powered search engine for your email history
 - Your complete Outlook management partner
-- **Email Management**: Search, compose, reply, and batch operations
+- **Email Management**: Search, compose, reply, delete, and batch operations
 - **Folder Management**: Create, move, and organize with intelligent workflows
 - **Policy Management**: Enterprise-grade retention and compliance controls
 
@@ -38,6 +38,7 @@ Talk to your AI assistant like you would to a human:
 - "Find all project updates from the last 2 weeks"
 - "Draft a reply to John about the meeting reschedule"
 - "Summarize this email thread for me"
+- "Delete this spam email for me"
 - "Forward this meeting invitation to all participants from my contacts.csv"
 
 ### � **Complete Folder Management**
@@ -284,6 +285,7 @@ The AI helps you send emails to multiple recipients efficiently:
 ### Email Viewing & Browsing
 - `view_email_cache_tool(page=1)` - View 5 emails per page
 - `get_email_by_number_tool(email_number)` - Get full email details
+- `delete_email_tool(email_number)` - Move email to Deleted Items folder (soft delete)
 
 ### Email Composition (Requires User Confirmation)
 - `reply_to_email_by_number_tool(email_number, reply_text, to_recipients=None, cc_recipients=None)` - Reply to email
