@@ -73,7 +73,7 @@ def reply_to_email_by_number(
             # Additional sender extraction for robustness
             sender_name = getattr(email, "SenderName", "")
             sender_address = getattr(email, "SenderEmailAddress", "")
-            
+
             # Log comprehensive sender information for debugging
             logger.debug(f"=== SENDER EXTRACTION DEBUG ===")
             logger.debug(f"SenderEmailAddress: {sender_email}")
@@ -81,26 +81,26 @@ def reply_to_email_by_number(
             logger.debug(f"Combined sender info: {sender_name} <{sender_address}>")
             logger.debug(f"Normalized sender email: {normalized_sender_email}")
             logger.debug(f"=== END SENDER EXTRACTION DEBUG ===")
-            
+
             # Also check if sender appears in original email fields
             original_to = safe_encode_text(getattr(email, "To", ""), "original_to")
             original_cc = safe_encode_text(getattr(email, "CC", ""), "original_cc")
             logger.debug(f"Original TO field: {original_to}")
             logger.debug(f"Original CC field: {original_cc}")
-            
+
             # Create a comprehensive list of sender variations to filter against
             sender_variations = set()
             sender_variations.add(normalized_sender_email)
-            
+
             # Add display name variations
             if sender_name and sender_address:
                 # "Name <email@domain.com>" format
                 display_format = f"{sender_name} <{sender_address}>".strip()
                 sender_variations.add(normalize_email_address(display_format))
-                
+
                 # Also check individual components
                 sender_variations.add(normalize_email_address(sender_name))
-            
+
             # Check if sender appears in original To field
             if original_to:
                 to_emails = [addr.strip() for addr in original_to.split(";") if addr.strip()]
@@ -109,7 +109,7 @@ def reply_to_email_by_number(
                     sender_variations.add(normalized_to)
                     if normalized_to == normalized_sender_email:
                         logger.debug(f"Found sender in original TO field: {to_email}")
-            
+
             # Check if sender appears in original CC field
             if original_cc:
                 cc_emails = [addr.strip() for addr in original_cc.split(";") if addr.strip()]
@@ -118,9 +118,9 @@ def reply_to_email_by_number(
                     sender_variations.add(normalized_cc)
                     if normalized_cc == normalized_sender_email:
                         logger.debug(f"Found sender in original CC field: {cc_email}")
-            
+
             logger.debug(f"Sender variations to filter against: {sorted(sender_variations)}")
-            
+
             # Create a comprehensive filtering function
             def is_sender_email(email_address):
                 """Check if an email address matches any sender variation"""
@@ -138,13 +138,13 @@ def reply_to_email_by_number(
                 # Get CC recipients from cache using both display names and email addresses
                 cc_recipients_data = cached_email.get("cc_recipients", [])
                 logger.debug(f"Processing {len(cc_recipients_data)} CC recipients from cache")
-                
+
                 for i, recipient_info in enumerate(cc_recipients_data):
                     if isinstance(recipient_info, dict):
                         recipient_email = recipient_info.get("email", "").strip()
                         recipient_display_name = recipient_info.get("display_name", "").strip()
                         normalized_recipient_email = normalize_email_address(recipient_email)
-                        
+
                         logger.debug(f"CC recipient {i+1}: {recipient_info}")
                         logger.debug(f"  Extracted email: '{recipient_email}'")
                         logger.debug(f"  Extracted display name: '{recipient_display_name}'")
@@ -156,18 +156,22 @@ def reply_to_email_by_number(
                             if not is_sender_email(recipient_email):
                                 # Prefer display name with email, fallback to just email
                                 if recipient_display_name:
-                                    recipient_string = f"{recipient_display_name} <{recipient_email}>"
+                                    recipient_string = (
+                                        f"{recipient_display_name} <{recipient_email}>"
+                                    )
                                 else:
                                     recipient_string = recipient_email
                                 cc_recipients_set.add(recipient_string)
                                 logger.debug(f"  -> ADDED to CC: {recipient_string}")
                             else:
-                                logger.debug(f"  -> FILTERED OUT (matches sender): {recipient_email}")
+                                logger.debug(
+                                    f"  -> FILTERED OUT (matches sender): {recipient_email}"
+                                )
                         else:
                             logger.debug(f"  -> SKIPPED (empty email)")
                     else:
                         logger.debug(f"CC recipient {i+1}: Non-dict format: {recipient_info}")
-                        
+
                 logger.debug(f"Total CC recipients after filtering: {len(cc_recipients_set)}")
                 if cc_recipients_set:
                     logger.debug(f"CC recipients list: {sorted(cc_recipients_set)}")

@@ -98,10 +98,17 @@ class EmailReplyParams(BaseModel):
 class EmailComposeParams(BaseModel):
     """Parameters for composing a new email"""
 
-    recipient_email: str = Field(..., min_length=1, description="Recipient email address")
+    recipient_email: str = Field(
+        ...,
+        min_length=1,
+        description="Recipient email address(es) - can be single email or semicolon-separated list",
+    )
     subject: str = Field(..., min_length=1, description="Email subject")
     body: str = Field(..., min_length=1, description="Email body content")
-    cc_email: Optional[str] = Field(default=None, description="CC email address")
+    cc_email: Optional[str] = Field(
+        default=None,
+        description="CC email address(es) - can be single email or semicolon-separated list",
+    )
 
     @field_validator("recipient_email", "cc_email")
     @classmethod
@@ -112,12 +119,19 @@ class EmailComposeParams(BaseModel):
         if not v or not v.strip():
             raise ValueError("Email address must not be empty")
 
-        # Basic email validation
+        # Basic email validation for multiple emails (semicolon-separated)
         import re
 
-        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if not re.match(pattern, v.strip()):
-            raise ValueError(f"Invalid email address format: {v}")
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+
+        # Split by semicolon and validate each email
+        emails = [email.strip() for email in v.split(";") if email.strip()]
+        if not emails:
+            raise ValueError("At least one email address must be provided")
+
+        for email in emails:
+            if not re.match(email_pattern, email):
+                raise ValueError(f"Invalid email address format: {email}")
 
         return v.strip()
 
