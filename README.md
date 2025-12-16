@@ -1,20 +1,28 @@
 # 🤖 Outlook MCP Server: Your AI Email Assistant
 
-**Transform your Outlook inbox with AI-powered email management**
+**Complete Outlook management with AI-powered email, folder, and policy control**
 
 [![Star](https://img.shields.io/github/stars/marlonluo2018/outlook-mcp-server?style=for-the-badge&label=Star%20this%20project&color=yellow)](https://github.com/marlonluo2018/outlook-mcp-server)
 
 > ⭐ **Love this project? Give it a star!** Your support helps us improve and reach more users who need AI email assistance.
 
+### 🎯 **Core Management Features**
+- **📧 Email Management**: AI-powered search, compose, reply, and batch operations
+- **📁 Folder Management**: Intelligent organization, creation, and workflow automation  
+- **🏢 Policy Management**: Enterprise retention and compliance controls
+
 ## 🚀 What is This?
 
-The Outlook MCP Server is your personal AI email assistant that connects Microsoft Outlook with powerful language models. It's not just another email tool - it's your intelligent co-pilot for email management.
+The Outlook MCP Server is your personal AI email assistant that connects Microsoft Outlook with powerful language models. It's not just another email tool - it's your complete Outlook management system with AI-powered email, folder, and policy control.
 
 **Think of it as:**
 - Your personal email analyst that understands your inbox
 - A smart assistant that helps you draft perfect replies
 - An AI-powered search engine for your email history
-- Your email productivity partner
+- Your complete Outlook management partner
+- **Email Management**: Search, compose, reply, and batch operations
+- **Folder Management**: Create, move, and organize with intelligent workflows
+- **Policy Management**: Enterprise-grade retention and compliance controls
 
 ## ✨ Why You'll Love It
 
@@ -32,7 +40,19 @@ Talk to your AI assistant like you would to a human:
 - "Summarize this email thread for me"
 - "Forward this meeting invitation to all participants from my contacts.csv"
 
-### 🔌 **Seamless Integration**
+### � **Complete Folder Management**
+- **Smart Organization**: Create, move, and organize folders with AI guidance
+- **Intelligent Workflows**: Discover folder structure before operations
+- **Nested Support**: Handle complex folder hierarchies up to 3 levels deep
+- **Bulk Operations**: Move emails and folders efficiently
+
+### 🏢 **Enterprise Policy Management**
+- **Retention Policies**: Assign Exchange retention policies to emails
+- **Compliance Controls**: Enterprise-grade policy assignment and verification
+- **Policy Discovery**: Browse available policies before assignment
+- **Multi-method Support**: Multiple assignment approaches for compatibility
+
+### �🔌 **Seamless Integration**
 - Works with any MCP-compatible AI assistant (Claude, GPT, etc.)
 - Direct integration with Microsoft Outlook
 - No complicated setup - just install and connect
