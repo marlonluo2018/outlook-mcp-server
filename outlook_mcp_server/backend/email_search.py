@@ -75,7 +75,7 @@ def search_email_by_body(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
 ) -> Tuple[List[Dict[str, Any]], str]:
     """Search emails by body content and return list of emails with note."""
-    return _unified_search(search_term, days, folder_name, match_all, "body")
+    return _optimized_body_search(search_term, days, folder_name, match_all)
 
 
 def list_folders() -> List[str]:
@@ -200,8 +200,142 @@ def _unified_search(
 
     logger.info(f"Searching for '{search_term}' in {search_field} (days={days}, folder={folder_name})")
     
+    # Use optimized server-side filtering for subject, sender, and recipient
+    if search_field in ["subject", "sender", "recipient"]:
+        return _server_side_search(params.search_term, params.days, params.folder_name, params.match_all, search_field)
+    
+    # Fall back to client-side filtering for body search
+    return _client_side_search(params.search_term, params.days, params.folder_name, params.match_all, search_field)
+
+
+def _server_side_search(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True,
+    search_field: str = "subject",
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Optimized server-side search using Outlook's DASL filters."""
+    from datetime import datetime, timedelta
+    from .utils import build_dasl_filter, sanitize_search_term
+    
+    # Sanitize search term
+    sanitized_term = sanitize_search_term(search_term)
+    if not sanitized_term:
+        return [], "Error: Invalid search term"
+    
+    # Build search terms list
+    search_terms = [term.strip() for term in sanitized_term.split() if term.strip()]
+    if not search_terms:
+        return [], "Error: No valid search terms"
+    
+    # Calculate threshold date
+    threshold_date = datetime.now() - timedelta(days=days)
+    
+    with OutlookSessionManager() as session:
+        if not session or not session.namespace:
+            logger.error("Failed to establish Outlook session")
+            return [], "Error: Failed to establish Outlook session"
+        
+        try:
+            # Find the target folder
+            target_folder = None
+            folder_parts = folder_name.split("/") if folder_name else ["Inbox"]
+            
+            # Try to get standard folders directly
+            if len(folder_parts) == 1 and folder_parts[0] in ["Inbox", "Sent Items", "Drafts", "Outbox"]:
+                try:
+                    if folder_parts[0] == "Inbox":
+                        target_folder = session.namespace.GetDefaultFolder(6)
+                    elif folder_parts[0] == "Sent Items":
+                        target_folder = session.namespace.GetDefaultFolder(5)
+                    elif folder_parts[0] == "Drafts":
+                        target_folder = session.namespace.GetDefaultFolder(16)
+                    elif folder_parts[0] == "Outbox":
+                        target_folder = session.namespace.GetDefaultFolder(4)
+                except Exception as e:
+                    logger.warning(f"Could not get default folder {folder_parts[0]}: {e}")
+            
+            if not target_folder:
+                # Navigate through folder hierarchy
+                target_folder = session.namespace
+                for part in folder_parts:
+                    found = False
+                    for folder in target_folder.Folders:
+                        if folder.Name.lower() == part.lower():
+                            target_folder = folder
+                            found = True
+                            break
+                    if not found:
+                        logger.error(f"Folder '{part}' not found in path '{folder_name}'")
+                        return [], f"Error: Folder '{folder_name}' not found"
+            
+            # Build DASL filter for server-side filtering
+            dasl_filter = build_dasl_filter(search_terms, threshold_date, search_field, match_all)
+            logger.info(f"Using DASL filter: {dasl_filter}")
+            
+            # Apply server-side filter
+            try:
+                items = target_folder.Items.Restrict(dasl_filter)
+                logger.info(f"DASL filter applied, got {items.Count} items")
+            except Exception as filter_error:
+                logger.warning(f"DASL filter failed: {filter_error}. Falling back to client-side filtering.")
+                # Fall back to client-side search if server-side filtering fails
+                return _client_side_search(search_term, days, folder_name, match_all, search_field)
+            
+            # Sort by received time (newest first)
+            try:
+                items.Sort("[ReceivedTime]", True)
+            except Exception as e:
+                logger.warning(f"Could not sort items: {e}")
+            
+            # Process filtered items
+            emails = []
+            count = 0
+            max_emails = 1000
+            
+            for item in items:
+                try:
+                    if count >= max_emails:
+                        break
+                        
+                    if item.Class == OutlookItemClass.MAIL_ITEM:
+                        email_data = _extract_email_data(item)
+                        if email_data:
+                            emails.append(email_data)
+                            count += 1
+                            
+                except Exception as e:
+                    logger.warning(f"Error processing email item: {e}")
+                    continue
+            
+            # Add to cache
+            if emails:
+                from .shared import add_email_to_cache
+                logger.debug(f"Adding {len(emails)} emails to cache...")
+                for email_data in emails:
+                    add_email_to_cache(email_data["id"], email_data)
+            
+            logger.info(f"Server-side search found {len(emails)} matching emails")
+            return emails, f"Found {len(emails)} matching emails from last {days} days"
+            
+        except Exception as e:
+            logger.error(f"Error in server-side search: {e}")
+            return [], f"Error: {e}"
+
+
+def _client_side_search(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True,
+    search_field: str = "subject",
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Client-side search for cases where server-side filtering is not available."""
+    logger.info(f"Using client-side search for '{search_term}' in {search_field}")
+    
     # Get emails from folder
-    emails, note = get_emails_from_folder(folder_name=params.folder_name, days=params.days)
+    emails, note = get_emails_from_folder(folder_name=folder_name, days=days)
     
     if not emails:
         return [], note
@@ -209,15 +343,243 @@ def _unified_search(
     # Filter emails based on search criteria
     filtered_emails = []
     for email in emails:
-        if _client_side_filter(email, params.search_term, params.match_all, search_field):
+        if _client_side_filter(email, search_term, match_all, search_field):
             filtered_emails.append(email)
     
     # Sort by received time (newest first)
     filtered_emails.sort(key=lambda x: x.get("received_time", ""), reverse=True)
     
-    logger.info(f"Found {len(filtered_emails)} matching emails")
+    logger.info(f"Client-side search found {len(filtered_emails)} matching emails")
     
     return filtered_emails, f"Found {len(filtered_emails)} matching emails from last {days} days"
+
+
+def _optimized_body_search(
+    search_term: str,
+    days: int = 7,
+    folder_name: Optional[str] = None,
+    match_all: bool = True,
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Optimized body search that only loads email bodies when necessary."""
+    from datetime import datetime, timedelta
+    
+    logger.info(f"Starting optimized body search for '{search_term}'")
+    
+    # Build search terms
+    search_terms = [term.strip().lower() for term in search_term.split() if term.strip()]
+    if not search_terms:
+        return [], "Error: No valid search terms"
+    
+    with OutlookSessionManager() as session:
+        if not session or not session.namespace:
+            logger.error("Failed to establish Outlook session")
+            return [], "Error: Failed to establish Outlook session"
+        
+        try:
+            # Find the target folder
+            target_folder = None
+            folder_parts = folder_name.split("/") if folder_name else ["Inbox"]
+            
+            # Try to get standard folders directly
+            if len(folder_parts) == 1 and folder_parts[0] in ["Inbox", "Sent Items", "Drafts", "Outbox"]:
+                try:
+                    if folder_parts[0] == "Inbox":
+                        target_folder = session.namespace.GetDefaultFolder(6)
+                    elif folder_parts[0] == "Sent Items":
+                        target_folder = session.namespace.GetDefaultFolder(5)
+                    elif folder_parts[0] == "Drafts":
+                        target_folder = session.namespace.GetDefaultFolder(16)
+                    elif folder_parts[0] == "Outbox":
+                        target_folder = session.namespace.GetDefaultFolder(4)
+                except Exception as e:
+                    logger.warning(f"Could not get default folder {folder_parts[0]}: {e}")
+            
+            if not target_folder:
+                # Navigate through folder hierarchy
+                target_folder = session.namespace
+                for part in folder_parts:
+                    found = False
+                    for folder in target_folder.Folders:
+                        if folder.Name.lower() == part.lower():
+                            target_folder = folder
+                            found = True
+                            break
+                    if not found:
+                        logger.error(f"Folder '{part}' not found in path '{folder_name}'")
+                        return [], f"Error: Folder '{folder_name}' not found"
+            
+            # Build date filter
+            if days and days > 0:
+                start_date = datetime.now() - timedelta(days=days)
+                filter_str = f"[ReceivedTime] >= '{start_date.strftime('%m/%d/%Y')}'"
+                logger.info(f"Using date filter: {filter_str}")
+            else:
+                filter_str = ""
+            
+            # Get items with date filter first (much faster than loading all)
+            if filter_str:
+                try:
+                    items = target_folder.Items.Restrict(filter_str)
+                    logger.info(f"Date filter applied, got {items.Count} items")
+                except Exception as filter_error:
+                    logger.warning(f"Date filter failed: {filter_error}. Using all items.")
+                    items = target_folder.Items
+            else:
+                items = target_folder.Items
+            
+            # Sort by received time (newest first)
+            try:
+                items.Sort("[ReceivedTime]", True)
+            except Exception as e:
+                logger.warning(f"Could not sort items: {e}")
+            
+            # Process items with lazy body loading
+            emails = []
+            count = 0
+            max_emails = 1000
+            
+            for item in items:
+                try:
+                    if count >= max_emails:
+                        break
+                        
+                    if item.Class == OutlookItemClass.MAIL_ITEM:
+                        # First, extract basic email data without body
+                        email_data = _extract_email_data_light(item)
+                        if email_data:
+                            # Only load and check body if basic data passes initial criteria
+                            if _should_check_body(email_data, search_terms, match_all):
+                                body_content = _get_email_body(item)
+                                if body_content and _body_matches_search(body_content, search_terms, match_all):
+                                    # Add body to email data and include in results
+                                    email_data["body"] = body_content
+                                    emails.append(email_data)
+                                    count += 1
+                            else:
+                                # Skip body loading for emails that don't match basic criteria
+                                logger.debug(f"Skipping body check for email: {email_data.get('subject', 'No Subject')}")
+                                
+                except Exception as e:
+                    logger.warning(f"Error processing email item: {e}")
+                    continue
+            
+            # Add to cache
+            if emails:
+                from .shared import add_email_to_cache
+                logger.debug(f"Adding {len(emails)} emails to cache...")
+                for email_data in emails:
+                    add_email_to_cache(email_data["id"], email_data)
+            
+            logger.info(f"Body search found {len(emails)} matching emails")
+            return emails, f"Found {len(emails)} matching emails from last {days} days"
+            
+        except Exception as e:
+            logger.error(f"Error in optimized body search: {e}")
+            return [], f"Error: {e}"
+
+
+def _extract_email_data_light(item) -> Optional[Dict[str, Any]]:
+    """Extract basic email data without loading the body (for performance)."""
+    try:
+        # Basic email properties without body
+        received_time = getattr(item, "ReceivedTime", "")
+        if received_time:
+            received_time_str = str(received_time)
+            if '+' in received_time_str:
+                received_time_str = received_time_str.split('+')[0].strip()
+        else:
+            received_time_str = ""
+        
+        email_data = {
+            "id": getattr(item, "EntryID", ""),
+            "subject": safe_encode_text(getattr(item, "Subject", "No Subject"), "subject"),
+            "received_time": received_time_str,
+            "unread": getattr(item, "UnRead", False),
+            "has_attachments": getattr(item, "Attachments", None) is not None and getattr(item, "Attachments").Count > 0,
+            "size": getattr(item, "Size", 0),
+        }
+        
+        # Sender information (lightweight)
+        try:
+            sender = getattr(item, "Sender", None)
+            if sender:
+                sender_name = getattr(sender, "Name", "")
+                sender_email = getattr(sender, "Address", "")
+                email_data["sender"] = {
+                    "name": safe_encode_text(sender_name, "sender_name"),
+                    "email": safe_encode_text(sender_email, "sender_email")
+                }
+            else:
+                email_data["sender"] = {"name": "Unknown Sender", "email": ""}
+        except Exception as e:
+            logger.warning(f"Error extracting sender info: {e}")
+            email_data["sender"] = {"name": "Unknown Sender", "email": ""}
+        
+        # Recipients (lightweight)
+        try:
+            to_recipients = getattr(item, "To", "")
+            cc_recipients = getattr(item, "CC", "")
+            email_data["to_recipients"] = _parse_recipients_light(to_recipients)
+            email_data["cc_recipients"] = _parse_recipients_light(cc_recipients)
+        except Exception as e:
+            logger.warning(f"Error extracting recipients: {e}")
+            email_data["to_recipients"] = []
+            email_data["cc_recipients"] = []
+        
+        return email_data
+        
+    except Exception as e:
+        logger.warning(f"Error extracting light email data: {e}")
+        return None
+
+
+def _parse_recipients_light(recipients_str: str) -> List[Dict[str, str]]:
+    """Parse recipient string into lightweight format."""
+    recipients = []
+    if not recipients_str:
+        return recipients
+    
+    # Simple split by semicolon
+    for recipient in recipients_str.split(";"):
+        recipient = recipient.strip()
+        if recipient:
+            # Extract name and email if in format "Name <email>"
+            if "<" in recipient and ">" in recipient:
+                name = recipient.split("<")[0].strip()
+                email = recipient.split("<")[1].split(">")[0].strip()
+                recipients.append({"name": name, "email": email})
+            else:
+                # Assume it's just an email
+                recipients.append({"name": "", "email": recipient})
+    
+    return recipients
+
+
+def _should_check_body(email_data: Dict[str, Any], search_terms: List[str], match_all: bool) -> bool:
+    """Quick pre-filter to determine if we should load the body."""
+    # For now, always check body - but this could be enhanced with heuristics
+    # like checking if subject contains similar terms, etc.
+    return True
+
+
+def _get_email_body(item) -> str:
+    """Get email body content."""
+    try:
+        body = getattr(item, "Body", "")
+        return safe_encode_text(body, "body")
+    except Exception as e:
+        logger.warning(f"Error getting email body: {e}")
+        return ""
+
+
+def _body_matches_search(body_content: str, search_terms: List[str], match_all: bool) -> bool:
+    """Check if body content matches search terms."""
+    body_lower = body_content.lower()
+    
+    if match_all:
+        return all(term in body_lower for term in search_terms)
+    else:
+        return any(term in body_lower for term in search_terms)
 
 
 def get_emails_from_folder(folder_name: str = "Inbox", days: int = 7) -> Tuple[List[Dict[str, Any]], str]:
