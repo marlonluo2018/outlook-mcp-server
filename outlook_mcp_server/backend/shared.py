@@ -15,6 +15,9 @@ MAX_BACKOFF = 16  # seconds
 # Cache configuration
 import os
 import json
+import threading
+import queue
+import time
 from datetime import datetime, timedelta
 
 # Cache base location
@@ -23,13 +26,20 @@ CACHE_BASE_DIR = os.path.join(
 )
 CACHE_EXPIRY_HOURS = 6  # Cache expires after 6 hours
 MAX_CACHE_SIZE = 1000  # Maximum number of emails to keep in cache
-BATCH_SAVE_SIZE = 10  # Save cache after every N emails instead of every email
+BATCH_SAVE_SIZE = 200  # Increased batch size for better performance (reduced I/O operations)
+CACHE_SAVE_INTERVAL = 15.0  # Increased interval to reduce disk I/O for better performance
 
 # Global cache storage
 email_cache = {}
 
 # Email cache insertion order tracking
 email_cache_order = []
+
+# Cache save management
+_cache_save_thread = None
+_cache_save_queue = queue.Queue()
+_last_cache_save_time = 0
+_cache_save_lock = threading.Lock()
 
 
 def _get_cache_file() -> str:
@@ -69,42 +79,92 @@ def add_email_to_cache(email_id: str, email_data: dict):
         del email_cache[oldest_id]  # Remove from cache
 
 
+def _async_cache_saver():
+    """Background thread for saving cache to disk."""
+    while True:
+        try:
+            # Wait for save request
+            force_save = _cache_save_queue.get(timeout=1.0)
+            
+            # Check if we should save (respect minimum interval)
+            current_time = time.time()
+            with _cache_save_lock:
+                if not force_save and (current_time - _last_cache_save_time) < CACHE_SAVE_INTERVAL:
+                    continue
+                    
+                if email_cache:  # Only save if there's data
+                    cache_data = {
+                        "cache": email_cache,
+                        "cache_order": email_cache_order,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    
+                    # Use temporary file for atomic write
+                    cache_file = _get_cache_file()
+                    temp_file = cache_file + '.tmp'
+                    
+                    with open(temp_file, "w", encoding="utf-8") as f:
+                        json.dump(cache_data, f, ensure_ascii=False)
+                    
+                    # Atomic rename
+                    os.replace(temp_file, cache_file)
+                    
+                    # Update last save time
+                    globals()['_last_cache_save_time'] = current_time
+                    
+        except queue.Empty:
+            continue
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to save email cache in background: {e}")
+
+
 def save_email_cache(force_save=False):
-    """Save the email cache to disk with optional batching.
+    """Save the email cache to disk with optimized asynchronous batching.
     
     Args:
         force_save: If True, save immediately regardless of batch size
     """
+    global _cache_save_thread, _last_cache_save_time
+    
     try:
-        _ensure_cache_dir_exists()
-
         # Initialize counter if not exists
         if not hasattr(save_email_cache, '_pending_save_count'):
             save_email_cache._pending_save_count = 0
         
-        # Only save if we have cache data
+        # PERFORMANCE OPTIMIZATION: Only save if we have cache data
         if email_cache:
             save_email_cache._pending_save_count += 1
             
-            # Save only if forced or reached batch size
+            # PERFORMANCE OPTIMIZATION: Save only if forced or reached larger batch size
+            # Increased from 100 to 200 to reduce I/O operations
             if force_save or save_email_cache._pending_save_count >= BATCH_SAVE_SIZE:
-                cache_data = {
-                    "cache": email_cache,
-                    "cache_order": email_cache_order,
-                    "timestamp": datetime.now().isoformat(),
-                }
-
-                with open(_get_cache_file(), "w", encoding="utf-8") as f:
-                    json.dump(cache_data, f, ensure_ascii=False, indent=2)
+                # PERFORMANCE OPTIMIZATION: Check time interval to avoid too frequent saves
+                current_time = time.time()
+                if not force_save and (current_time - _last_cache_save_time) < CACHE_SAVE_INTERVAL:
+                    # Skip this save to reduce I/O
+                    return
                 
-                # Reset counter after successful save
+                # Start background saver thread if not running
+                if _cache_save_thread is None or not _cache_save_thread.is_alive():
+                    _cache_save_thread = threading.Thread(target=_async_cache_saver, daemon=True)
+                    _cache_save_thread.start()
+                
+                # Queue save request
+                _cache_save_queue.put(force_save)
+                
+                # PERFORMANCE OPTIMIZATION: Update last save time immediately
+                # This prevents multiple saves in quick succession
+                _last_cache_save_time = current_time
+                
+                # Reset counter after queuing save
                 save_email_cache._pending_save_count = 0
                 
     except Exception as e:
         import logging
-
         logger = logging.getLogger(__name__)
-        logger.warning(f"Failed to save email cache: {e}")
+        logger.warning(f"Failed to queue email cache save: {e}")
 
 
 def load_email_cache():

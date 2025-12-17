@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, Union
 
 from .outlook_session import OutlookSessionManager
-from .shared import email_cache, save_email_cache, LAZY_LOADING_ENABLED
-from .utils import OutlookItemClass, safe_encode_text
+from .shared import email_cache, save_email_cache, LAZY_LOADING_ENABLED, clear_email_cache, add_email_to_cache, MAX_LOAD_TIME, MAX_DAYS, MAX_EMAILS
+from .utils import OutlookItemClass, safe_encode_text, build_dasl_filter, get_pagination_info
 from .validators import EmailSearchParams
 
 logger = logging.getLogger(__name__)
@@ -240,7 +240,9 @@ def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> str:
     Loads emails into cache and returns count message.
     """
     try:
-        params = EmailListParams(days=days or 7, folder_name=folder_name)
+        # Default to 365 days if not specified to ensure we get results
+        effective_days = days or 365
+        params = EmailListParams(days=effective_days, folder_name=folder_name)
     except Exception as e:
         logger.error(f"Validation error in list_recent_emails: {e}")
         raise ValueError(f"Invalid parameters: {e}")
@@ -742,21 +744,50 @@ def _unified_search(
     # If no results found with server-side filtering, try extended search
     if not emails and search_term:
         search_terms = search_term.lower().split()
-        if len(search_terms) == 1:
-            extended_days = min(90, days * 4)
-            logger.info(f"No results found, trying extended search for {extended_days} days")
+        # Try extended search for any number of search terms, but with OR logic
+        extended_days = min(90, days * 4)
+        logger.info(f"No results found, trying extended search for {extended_days} days with OR logic")
 
-            extended_emails, extended_note = get_emails_from_folder(
+        extended_emails, extended_note = get_emails_from_folder(
+            search_term=search_term,
+            days=extended_days,
+            folder_name=folder_name,
+            match_all=False,  # Use OR logic for extended search
+            **filter_kwargs,
+        )
+
+        if extended_emails:
+            note += f" (extended search with OR logic in last {extended_days} days)"
+            return extended_emails, note
+        
+        # If still no results, try searching across different fields with OR logic
+        logger.info(f"No results in {field_filter} field, trying across all fields with OR logic")
+        
+        # Try body search if we were searching subject only (or default)
+        if not body_filter_only and not sender_filter_only and not recipient_filter_only:
+            body_emails, body_note = get_emails_from_folder(
                 search_term=search_term,
                 days=extended_days,
                 folder_name=folder_name,
-                match_all=match_all,
-                **filter_kwargs,
+                match_all=False,
+                body_filter_only=True,
             )
-
-            if extended_emails:
-                note += f" (extended search in last {extended_days} days)"
-                return extended_emails, note
+            if body_emails:
+                note += f" (found in body with OR logic in last {extended_days} days)"
+                return body_emails, note
+        
+        # Try subject search if we were searching body only
+        if body_filter_only:
+            subject_emails, subject_note = get_emails_from_folder(
+                search_term=search_term,
+                days=extended_days,
+                folder_name=folder_name,
+                match_all=False,
+                subject_filter_only=True,
+            )
+            if subject_emails:
+                note += f" (found in subject with OR logic in last {extended_days} days)"
+                return subject_emails, note
 
     return emails, note
 
@@ -771,7 +802,7 @@ def get_emails_from_folder(
     subject_filter_only: bool = False,
     body_filter_only: bool = False,
 ) -> Tuple[List[Dict[str, Any]], str]:
-    """Retrieve emails from specified folder with batch processing and timeout.
+    """Retrieve emails from specified folder with optimized batch processing and timeout.
 
     Args:
         search_term: Optional search term to filter emails
@@ -798,7 +829,7 @@ def get_emails_from_folder(
     with OutlookSessionManager() as session:
         while retry_count < 3:
             try:
-                # Check timeout
+                # Check timeout early
                 if time.time() - start_time > MAX_LOAD_TIME:
                     limit_note = " (MAX_LOAD_TIME reached)"
                     logger.warning(f"MAX_LOAD_TIME reached after processing {len(emails)} emails")
@@ -814,7 +845,29 @@ def get_emails_from_folder(
                 # Get date threshold
                 days_to_use = min(days or MAX_DAYS, MAX_DAYS)
                 now = datetime.now()
-                threshold_date = now.replace(tzinfo=timezone.utc) - timedelta(days=days_to_use)
+                # Fix: Calculate threshold correctly (subtract days from current date)
+                threshold_date = now - timedelta(days=days_to_use)
+                logger.debug(f"Current date: {now}, Looking for emails since: {threshold_date}")
+
+                # PERFORMANCE OPTIMIZATION: Always apply date filter first to reduce the dataset
+                # This dramatically reduces the number of emails we need to process
+                logger.info(f"Applying date filter to get emails from last {days_to_use} days")
+                try:
+                    # Fix: Use local time for Outlook date filtering instead of UTC
+                    local_threshold_date = threshold_date.replace(tzinfo=None)
+                    # Fix: Use only date part in MM/DD/YYYY format for Outlook (US date format)
+                    date_str = local_threshold_date.strftime('%m/%d/%Y')
+                    date_filter = f"[ReceivedTime] >= '{date_str}'"
+                    logger.debug(f"Using date filter: {date_filter}")
+                    filtered_items = folder_items.Restrict(date_filter)
+                    if filtered_items and filtered_items.Count > 0:
+                        folder_items = filtered_items
+                        logger.info(f"Date filter reduced emails from {folder_items.Count} to {filtered_items.Count}")
+                    else:
+                        logger.info("No recent emails found in the specified time range")
+                        return [], " (No recent emails found)"
+                except Exception as filter_error:
+                    logger.warning(f"Date filter failed, continuing with all items: {filter_error}")
 
                 # Build optimized DASL filter if search term is provided
                 if search_term:
@@ -840,97 +893,154 @@ def get_emails_from_folder(
                         logger.info(f"Applying DASL filter: {filter_str}")
                         try:
                             filtered_items = folder_items.Restrict(filter_str)
-                            if filtered_items:
+                            if filtered_items and filtered_items.Count > 0:
                                 folder_items = filtered_items
                                 logger.info(f"Filter applied, {filtered_items.Count} items match")
+                                # Fast path: if filtered count is small, we can process quickly
+                                if filtered_items.Count < 50:
+                                    logger.info("Small result set, will use fast processing")
                             else:
                                 logger.info("No items match the filter")
                                 return [], " (No matching emails found)"
                         except Exception as filter_error:
                             logger.warning(f"DASL filter failed, falling back to client-side filtering: {filter_error}")
-                            # Continue with unfiltered items and apply client-side filtering below
+                            # Continue with date-filtered items and apply client-side filtering below
 
-                # Sort by received time (newest first)
+                # PERFORMANCE OPTIMIZATION: Only sort if we still have many items after filtering
+                # For small result sets (< 500), skip sorting to improve performance
                 try:
-                    folder_items.Sort("[ReceivedTime]", True)
+                    if folder_items.Count > 500:
+                        folder_items.Sort("[ReceivedTime]", True)
+                        logger.info(f"Sorted {folder_items.Count} items by date")
+                    else:
+                        logger.info(f"Skipping sort for {folder_items.Count} items (performance optimization)")
                 except Exception as sort_error:
                     logger.warning(f"Failed to sort items: {sort_error}")
 
-                # Process emails with timeout protection
+                # PERFORMANCE OPTIMIZATION: Use larger batch size for better performance
+                # Increase from 200 to 500 to reduce batch overhead
+                batch_size = 500  # Increased batch size for better performance
                 processed_count = 0
+                batch_emails = []  # Collect emails in batches before processing
+                last_cache_save = time.time()
                 
-                # Use enumerator for better performance
+                # Pre-allocate lists for better performance
+                email_batch_data = []
+                batch_count = 0
+                
+                # Use faster iteration method - bypass problematic enumerator
                 try:
-                    items_enum = folder_items.GetEnumerator()
+                    # Try count-based iteration first (much faster)
+                    item_count = folder_items.Count
+                    logger.info(f"Processing {item_count} items from folder")
+                    
+                    # Use indexed access which is more reliable than enumerator
+                    def fast_item_iterator():
+                        for i in range(1, min(item_count + 1, 10000)):  # Limit to prevent infinite loops
+                            try:
+                                yield folder_items.Item(i)
+                            except Exception as e:
+                                logger.debug(f"Failed to access item {i}: {e}")
+                                break
+                    
+                    items_enum = fast_item_iterator()
+                    
                 except Exception as enum_error:
-                    logger.warning(f"Failed to get enumerator, using direct iteration: {enum_error}")
+                    logger.warning(f"Failed to get item count, using direct iteration: {enum_error}")
+                    # Fallback to direct iteration
                     items_enum = folder_items
 
+                # PERFORMANCE OPTIMIZATION: Process items in larger batches with less frequent checks
+                # Batch emails for processing - MASSIVE batch processing for performance
                 for item in items_enum:
-                    # Check timeout every 50 emails
-                    if processed_count % 50 == 0 and time.time() - start_time > MAX_LOAD_TIME:
-                        limit_note = " (MAX_LOAD_TIME reached)"
-                        logger.warning(f"MAX_LOAD_TIME reached after processing {processed_count} emails")
-                        break
-
-                    # Check email limit
-                    if len(emails) >= MAX_EMAILS:
-                        limit_note = f" (Limited to {MAX_EMAILS} emails)"
-                        logger.info(f"Reached maximum email limit: {MAX_EMAILS}")
-                        break
+                    # Optimized timeout check - every 500 emails for maximum performance
+                    if processed_count % 500 == 0 and processed_count > 0:
+                        if time.time() - start_time > MAX_LOAD_TIME:
+                            limit_note = " (MAX_LOAD_TIME reached)"
+                            logger.warning(f"MAX_LOAD_TIME reached after processing {processed_count} emails")
+                            break
+                        
+                        # Check email limit less frequently for better performance
+                        if len(emails) >= MAX_EMAILS - 200:  # Earlier check for better performance
+                            limit_note = f" (Limited to {MAX_EMAILS} emails)"
+                            logger.info(f"Approaching maximum email limit: {MAX_EMAILS}")
+                            break
 
                     try:
-                        # Skip non-mail items
-                        if item.Class != OutlookItemClass.MAIL_ITEM:
-                            continue
+                        # Skip ReceivedTime check since we already filtered by date
+                        # This saves one COM call per email, which is significant
 
-                        # Get received time and apply date filtering if no server-side filter was applied
-                        received_time = getattr(item, "ReceivedTime", None)
-                        if received_time is None:
-                            continue
+                        # Batch email for processing - just store reference
+                        batch_emails.append(item)
+                        
+                        # Process batch when it reaches size limit - MASSIVE batch processing
+                        if len(batch_emails) >= batch_size:
+                            # Process entire batch at once for speed
+                            email_batch_data = []
+                            
+                            for batch_item in batch_emails:
+                                # Fast client-side filtering (only if needed)
+                                if search_term and not _client_side_filter(batch_item, search_terms, match_all, sender_filter_only, recipient_filter_only, subject_filter_only, body_filter_only):
+                                    continue
 
-                        # Convert to UTC for comparison
-                        try:
-                            if isinstance(received_time, datetime):
-                                # Ensure timezone-aware
-                                if received_time.tzinfo is None:
-                                    received_time = received_time.replace(tzinfo=timezone.utc)
-                                else:
-                                    received_time = received_time.astimezone(timezone.utc)
-                            else:
-                                # Handle non-datetime received_time
-                                received_time = datetime.fromtimestamp(float(received_time), tz=timezone.utc)
-                        except (ValueError, TypeError, AttributeError) as dt_error:
-                            logger.warning(f"Invalid received time format, skipping: {dt_error}")
-                            continue
-
-                        # Apply client-side date filtering if no server-side filter was applied
-                        if not search_term and received_time < threshold_date:
-                            continue
-
-                        # Client-side search term filtering (if server-side filtering failed or wasn't applied)
-                        if search_term and not _client_side_filter(item, search_terms, match_all, sender_filter_only, recipient_filter_only, subject_filter_only, body_filter_only):
-                            continue
-
-                        # Extract email data
-                        email_data = _extract_email_data(item)
-                        if email_data:
-                            # Add to cache and results
-                            add_email_to_cache(email_data)
-                            emails.append(email_data)
+                                # Extract email data
+                                email_data = _extract_email_data(batch_item)
+                                if email_data:
+                                    email_batch_data.append(email_data)
+                            
+                            # Batch add to results and cache
+                            if email_batch_data:
+                                emails.extend(email_batch_data)
+                                # Batch cache update - optimized
+                                for email_data in email_batch_data:
+                                    add_email_to_cache(email_data["id"], email_data)
+                            
+                            # PERFORMANCE OPTIMIZATION: Save cache even less frequently for better performance
+                            # Increase from 10 seconds to 15 seconds
+                            current_time = time.time()
+                            if current_time - last_cache_save >= 15.0:
+                                save_email_cache()
+                                last_cache_save = current_time
+                            
+                            batch_emails = []  # Reset batch
 
                         processed_count += 1
 
                     except Exception as item_error:
                         failed_count += 1
                         logger.warning(f"Error processing email item: {item_error}")
-                        if failed_count > 10:  # Too many failures, stop processing
+                        if failed_count > 20:  # Increased threshold for better reliability with large batches
                             logger.error(f"Too many failed emails ({failed_count}), stopping processing")
                             break
                         continue
+                
+                # Process remaining emails in final batch - ultra-optimized
+                if batch_emails:
+                    # Pre-allocate list for better performance
+                    email_batch_data = []
+                    
+                    # Process all remaining items in batch
+                    for batch_item in batch_emails:
+                        # Fast filtering check
+                        if search_term and not _client_side_filter(batch_item, search_terms, match_all, sender_filter_only, recipient_filter_only, subject_filter_only, body_filter_only):
+                            continue
+                        
+                        # Extract email data
+                        email_data = _extract_email_data(batch_item)
+                        if email_data:
+                            email_batch_data.append(email_data)
+                    
+                    # Batch add to results and cache
+                    if email_batch_data:
+                        emails.extend(email_batch_data)
+                        # Batch cache update - single pass
+                        for email_data in email_batch_data:
+                            add_email_to_cache(email_data["id"], email_data)
 
-                # Force save cache at the end of processing to ensure all emails are saved
-                save_email_cache(force_save=True)
+                # PERFORMANCE OPTIMIZATION: Force save cache at the end only if we have many emails
+                # This avoids unnecessary disk I/O for small queries
+                if len(emails) > 100:  # Only save if we have significant results
+                    save_email_cache(force_save=True)
 
                 return emails[:MAX_EMAILS], limit_note
 
@@ -949,7 +1059,7 @@ def _client_side_filter(
     sender_filter_only: bool, recipient_filter_only: bool,
     subject_filter_only: bool, body_filter_only: bool
 ) -> bool:
-    """Apply client-side filtering to email item.
+    """Apply client-side filtering to email item - optimized for performance.
     
     Args:
         item: Outlook mail item
@@ -964,32 +1074,62 @@ def _client_side_filter(
         True if item matches search criteria, False otherwise
     """
     try:
-        # Get field content based on filter type
+        # Ultra-optimized: Minimize COM calls by using direct property access
+        content = ""
+        
         if sender_filter_only:
-            content = getattr(item, "SenderName", "") + " " + getattr(item, "SenderEmailAddress", "")
+            # Try direct property access first (faster than getattr)
+            try:
+                sender_name = item.SenderName or ""
+                sender_email = item.SenderEmailAddress or ""
+                content = f"{sender_name} {sender_email}"
+            except AttributeError:
+                content = ""
         elif recipient_filter_only:
-            content = ""
-            if hasattr(item, "To"):
-                content += getattr(item, "To", "")
-            if hasattr(item, "CC"):
-                content += " " + getattr(item, "CC", "")
+            # Ultra-fast recipient field extraction
+            try:
+                to_field = item.To or ""
+                content = to_field
+            except AttributeError:
+                content = ""
+            try:
+                cc_field = item.CC or ""
+                if cc_field:
+                    content += f" {cc_field}"
+            except AttributeError:
+                pass
         elif subject_filter_only:
-            content = getattr(item, "Subject", "")
+            try:
+                content = item.Subject or ""
+            except AttributeError:
+                content = ""
         elif body_filter_only:
-            content = getattr(item, "Body", "")
+            try:
+                content = item.Body or ""
+            except AttributeError:
+                content = ""
         else:
-            # Default: search subject
-            content = getattr(item, "Subject", "")
+            # Default: search subject (fastest option)
+            try:
+                content = item.Subject or ""
+            except AttributeError:
+                content = ""
             
         content = content.lower()
         
-        # Apply search terms
+        # Apply search terms with early termination for performance
         if match_all:
             # AND logic: all terms must be present
-            return all(term in content for term in search_terms)
+            for term in search_terms:
+                if term not in content:
+                    return False
+            return True
         else:
             # OR logic: any term must be present
-            return any(term in content for term in search_terms)
+            for term in search_terms:
+                if term in content:
+                    return True
+            return False
             
     except Exception as e:
         logger.warning(f"Error in client-side filter: {e}")
@@ -997,7 +1137,7 @@ def _client_side_filter(
 
 
 def _extract_email_data(item) -> Optional[Dict[str, Any]]:
-    """Extract email data from Outlook mail item.
+    """Extract email data from Outlook mail item - optimized for performance.
     
     Args:
         item: Outlook mail item
@@ -1006,41 +1146,106 @@ def _extract_email_data(item) -> Optional[Dict[str, Any]]:
         Dictionary with email data or None if extraction fails
     """
     try:
-        # Basic email properties
+        # Ultra-optimized: Get all properties in single batch to minimize COM calls
+        # Use direct property access where possible to avoid getattr overhead
+        try:
+            entry_id = item.EntryID
+        except AttributeError:
+            entry_id = ""
+            
+        try:
+            subject = safe_encode_text(item.Subject, "subject") if item.Subject else "No Subject"
+        except AttributeError:
+            subject = "No Subject"
+            
+        try:
+            sender = safe_encode_text(item.SenderName, "sender_name") if item.SenderName else "Unknown Sender"
+        except AttributeError:
+            sender = "Unknown Sender"
+            
+        try:
+            received_time = item.ReceivedTime
+            if isinstance(received_time, datetime):
+                # Only convert to ISO if it's actually a datetime object
+                received_time_iso = received_time.isoformat()
+            else:
+                received_time_iso = datetime.now().isoformat()
+        except AttributeError:
+            received_time_iso = datetime.now().isoformat()
+            
+        try:
+            unread = item.UnRead
+        except AttributeError:
+            unread = False
+            
+        # Optimized attachment check - single COM call
+        try:
+            attachments = item.Attachments
+            has_attachments = attachments and attachments.Count > 0
+        except AttributeError:
+            has_attachments = False
+            
+        try:
+            size = item.Size
+        except AttributeError:
+            size = 0
+            
+        try:
+            importance = item.Importance
+        except AttributeError:
+            importance = 1
+            
+        try:
+            sensitivity = item.Sensitivity
+        except AttributeError:
+            sensitivity = 0
+        
+        # Build email data with pre-computed values
         email_data = {
-            "id": getattr(item, "EntryID", ""),
-            "subject": safe_encode_text(getattr(item, "Subject", "No Subject"), "subject"),
-            "sender": safe_encode_text(getattr(item, "SenderName", "Unknown Sender"), "sender_name"),
-            "received_time": getattr(item, "ReceivedTime", datetime.now()),
-            "unread": getattr(item, "UnRead", False),
-            "has_attachments": getattr(item, "Attachments", None) and item.Attachments.Count > 0,
-            "size": getattr(item, "Size", 0),
-            "importance": getattr(item, "Importance", 1),
-            "sensitivity": getattr(item, "Sensitivity", 0),
+            "id": entry_id,
+            "subject": subject,
+            "sender": sender,
+            "received_time": received_time_iso,
+            "unread": unread,
+            "has_attachments": has_attachments,
+            "size": size,
+            "importance": importance,
+            "sensitivity": sensitivity,
         }
         
-        # Convert datetime to ISO format string
-        if isinstance(email_data["received_time"], datetime):
-            email_data["received_time"] = email_data["received_time"].isoformat()
-        
-        # Extract recipients
-        to_recipients = []
-        if hasattr(item, "To") and item.To:
-            to_recipients.append({"display_name": item.To, "email": item.To})
-        email_data["to_recipients"] = to_recipients
-        
-        cc_recipients = []
-        if hasattr(item, "CC") and item.CC:
-            cc_recipients.append({"display_name": item.CC, "email": item.CC})
-        email_data["cc_recipients"] = cc_recipients
-        
-        # Extract categories if available
-        if hasattr(item, "Categories") and item.Categories:
-            email_data["categories"] = item.Categories
+        # Ultra-fast recipient extraction - minimize COM calls
+        try:
+            to_field = item.To
+            if to_field:
+                email_data["to_recipients"] = [{"display_name": to_field, "email": to_field}]
+            else:
+                email_data["to_recipients"] = []
+        except AttributeError:
+            email_data["to_recipients"] = []
             
-        # Extract conversation topic if available
-        if hasattr(item, "ConversationTopic") and item.ConversationTopic:
-            email_data["conversation_topic"] = item.ConversationTopic
+        try:
+            cc_field = item.CC
+            if cc_field:
+                email_data["cc_recipients"] = [{"display_name": cc_field, "email": cc_field}]
+            else:
+                email_data["cc_recipients"] = []
+        except AttributeError:
+            email_data["cc_recipients"] = []
+        
+        # Optional fields - only if needed and available
+        try:
+            categories = item.Categories
+            if categories:
+                email_data["categories"] = categories
+        except AttributeError:
+            pass
+            
+        try:
+            conversation_topic = item.ConversationTopic
+            if conversation_topic:
+                email_data["conversation_topic"] = conversation_topic
+        except AttributeError:
+            pass
         
         return email_data
         
