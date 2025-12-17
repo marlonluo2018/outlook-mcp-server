@@ -12,6 +12,8 @@ from .backend.email_retrieval import (
     search_email_by_body,
     view_email_cache,
     get_email_by_number,
+    get_email_by_number_unified,
+    format_email_with_media,
     list_recent_emails,
     get_emails_from_folder,
 )
@@ -298,59 +300,57 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7) -> dict:
 
 
 @mcp.tool
-def get_email_by_number_tool(email_number: int) -> dict:
+def get_email_by_number_tool(email_number: int, mode: str = "basic", include_attachments: bool = True, embed_images: bool = True) -> dict:
     """
-    Get full email content including body and attachments by its cache number.
+    Get email content by its cache number with configurable retrieval modes.
+    
+    This unified tool replaces the previous basic and enhanced email retrieval tools
+    with a single interface that supports different retrieval modes:
+    - "basic": Fast, lightweight retrieval for email listings and summaries
+    - "enhanced": Full media support with attachments, inline images, and comprehensive metadata
+    - "lazy": Intelligent mode that adapts based on cached data for optimal performance
+    
     Requires emails to be loaded first via list_recent_emails or search_emails.
 
     Args:
         email_number: The number of the email in the cache (1-based)
+        mode: Retrieval mode - "basic" (original), "enhanced" (with media), "lazy" (performance optimized)
+        include_attachments: Whether to include attachment content (enhanced mode only, default: True)
+        embed_images: Whether to embed inline images in HTML body (enhanced mode only, default: True)
 
     Returns:
-        dict: Response containing full email details
+        dict: Response containing email details based on requested mode
         {
             "type": "text",
-            "text": "Full email details here"
+            "text": "Email details here"
         }
 
     Raises:
         ValueError: If email number is invalid or no emails are loaded
         RuntimeError: If cache contains invalid data
     """
-    if not isinstance(email_number, int) or email_number < 1:
-        raise ValueError("Email number must be a positive integer")
-
     try:
-        result = get_email_by_number(email_number)
+        result = get_email_by_number_unified(email_number, mode, include_attachments, embed_images)
         if result is None:
             raise ValueError(
                 "No email found at that position. Please load emails first using list_recent_emails or search_emails."
             )
-
-        # Format the email details in a specific order
-        formatted_text = f"""Subject: {result.get('subject', 'No Subject')}
-From: {result.get('sender', 'Unknown Sender')}"""
-
-        if result.get("to"):
-            formatted_text += f"\nTo: {result.get('to')}"
-
-        if result.get("cc"):
-            formatted_text += f"\nCC: {result.get('cc')}"
-
-        formatted_text += f"""
-Date: {result.get('received_time', 'Unknown Date')}
-
-Body:
-{result.get('body', 'No body content')}"""
-
-        if result.get("attachments"):
-            formatted_text += "\n\nAttachments:"
-            for attach in result["attachments"]:
-                formatted_text += (
-                    f"\n- {attach.get('name', 'Unknown')} ({attach.get('size', 0)} bytes)"
-                )
-
+        
+        # Format the result based on mode
+        if mode == "enhanced" and result.get("attachments"):
+            formatted_text = format_email_with_media(result)
+        else:
+            # For basic and lazy modes, use simple formatting
+            formatted_text = f"Subject: {result.get('subject', 'N/A')}\n"
+            formatted_text += f"From: {result.get('from', 'N/A')}\n"
+            formatted_text += f"To: {result.get('to', 'N/A')}\n"
+            formatted_text += f"Date: {result.get('received', 'N/A')}\n"
+            formatted_text += f"Body: {result.get('body', 'N/A')}\n"
+            if result.get("attachments"):
+                formatted_text += f"Attachments: {len(result['attachments'])}\n"
+        
         return {"type": "text", "text": formatted_text}
+        
     except ValueError as e:
         return {"type": "text", "text": f"Error: {str(e)}"}
 
@@ -598,7 +598,7 @@ def move_email_tool(email_number: int, target_folder_name: str) -> dict:
 
 
 @mcp.tool
-def delete_email_tool(email_number: int) -> dict:
+def delete_email_by_number_tool(email_number: int) -> dict:
     """Move an email to the Deleted Items folder.
 
     Args:

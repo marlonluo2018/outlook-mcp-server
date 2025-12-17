@@ -232,7 +232,7 @@ Attachments: [Attachment Count]
 
 **Viewing Tools:**
 - `view_email_cache_tool()` - View 5 emails per page
-- `get_email_by_number_tool()` - Get full details of specific email
+- `get_email_by_number_tool()` - Get full details of specific email with configurable modes
 
 #### **Phase 3: AI Analysis & Summary**
 When you select an email, the AI provides intelligent insights:
@@ -306,8 +306,8 @@ The AI helps you send emails to multiple recipients efficiently:
 
 ### Email Viewing & Browsing
 - `view_email_cache_tool(page=1)` - View 5 emails per page
-- `get_email_by_number_tool(email_number)` - Get full email details
-- `delete_email_tool(email_number)` - Move email to Deleted Items folder (soft delete)
+- `get_email_by_number_tool(email_number, mode="basic|enhanced|lazy")` - **Unified tool** for configurable email retrieval with media support
+- `delete_email_by_number_tool(email_number)` - Move email to Deleted Items folder (soft delete)
 
 ### Email Composition (Requires User Confirmation)
 - `reply_to_email_by_number_tool(email_number, reply_text, to_recipients=None, cc_recipients=None)` - Reply to email
@@ -402,7 +402,48 @@ python cli_interface.py
 - move_email - Move emails between folders
 ```
 
-## � Technical Details
+### Unified Email Retrieval Architecture
+
+The server now features a **unified email retrieval architecture** that consolidates all email access functionality into a single, configurable interface:
+
+**🎯 Three Retrieval Modes:**
+- **Basic Mode** (`"basic"`): Fast, lightweight retrieval for email listings and summaries
+- **Enhanced Mode** (`"enhanced"`): Full media support with attachments, inline images, and comprehensive metadata
+- **Lazy Mode** (`"lazy"`): Intelligent mode that adapts based on cached data for optimal performance
+
+**🔧 Unified Tool Interface:**
+```python
+# Single tool handles all email retrieval scenarios
+get_email_by_number_tool(email_number, mode="basic|enhanced|lazy", include_attachments=True, embed_images=True)
+```
+
+**✨ Key Benefits:**
+- **Simplified API**: One tool handles all email retrieval scenarios
+- **Performance Optimization**: Choose the right mode for your use case
+- **Consolidated Architecture**: Replaces multiple legacy tools with unified interface
+- **Future-Proof**: Easy to extend with new modes and features
+- **Resource Efficient**: Lazy mode minimizes unnecessary data fetching
+
+**📖 Complete Documentation:**
+- See the unified tool implementation in `email_retrieval.py` for technical details
+
+### Enhanced Email Media Support
+
+The unified email retrieval system includes comprehensive media support:
+
+**Features:**
+- **Attachment Content Extraction**: Automatically extracts base64-encoded content for embeddable files (images, text files)
+- **Inline Image Embedding**: Replaces CID references in HTML emails with embedded data URIs
+- **Comprehensive Metadata**: Provides MIME types, file sizes, content IDs for all attachments
+- **Content Preview**: Shows previews for small text files and images
+
+**Use Cases:**
+- View emails with embedded images without external dependencies
+- Extract attachment content for analysis or processing
+- Get complete email context including visual elements
+- Analyze email structure and inline content
+
+## 🛠 Technical Details
 
 ### Architecture
 - **Frontend**: MCP-compatible AI assistants (Claude, GPT, etc.)
