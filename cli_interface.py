@@ -6,16 +6,16 @@ from typing import Optional
 try:
     # First try imports from outlook_mcp_server package (direct execution)
     from outlook_mcp_server.backend.outlook_session import OutlookSessionManager
-    from outlook_mcp_server.backend.email_retrieval import (
-    list_recent_emails,
-    search_email_by_subject,
-    search_email_by_from,
-    search_email_by_to,
-    search_email_by_body,
-    get_email_by_number,
-    list_folders,
-    view_email_cache
-)
+    from outlook_mcp_server.backend.email_search import (
+        list_recent_emails,
+        search_email_by_subject,
+        search_email_by_from,
+        search_email_by_to,
+        search_email_by_body,
+        list_folders,
+        view_email_cache
+    )
+    from outlook_mcp_server.backend.email_data_extractor import get_email_by_number_unified
     from outlook_mcp_server.backend.email_composition import (
         compose_email,
         reply_to_email_by_number
@@ -26,14 +26,16 @@ except ImportError:
     try:
         # Then try relative imports (module usage)
         from .backend.outlook_session import OutlookSessionManager
-        from .backend.email_retrieval import (
-        search_email_by_subject,
-        search_email_by_from,
-        search_email_by_to,
-        search_email_by_body,
-        get_email_by_number,
-        list_folders
-    )
+        from .backend.email_search import (
+            list_recent_emails,
+            search_email_by_subject,
+            search_email_by_from,
+            search_email_by_to,
+            search_email_by_body,
+            list_folders,
+            view_email_cache
+        )
+        from .backend.email_data_extractor import get_email_by_number_unified
         from .backend.email_composition import (
             compose_email,
             reply_to_email_by_number
@@ -44,14 +46,16 @@ except ImportError:
         # Finally try direct imports from same directory
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from outlook_mcp_server.backend.outlook_session import OutlookSessionManager
-        from outlook_mcp_server.backend.email_retrieval import (
-        search_email_by_subject,
-        search_email_by_from,
-        search_email_by_to,
-        search_email_by_body,
-        get_email_by_number,
-        list_folders
-    )
+        from outlook_mcp_server.backend.email_search import (
+            list_recent_emails,
+            search_email_by_subject,
+            search_email_by_from,
+            search_email_by_to,
+            search_email_by_body,
+            list_folders,
+            view_email_cache
+        )
+        from outlook_mcp_server.backend.email_data_extractor import get_email_by_number_unified
         from outlook_mcp_server.backend.email_composition import (
             compose_email,
             reply_to_email_by_number
@@ -221,7 +225,7 @@ def interactive_mode():
                         continue
                         
                     email_id = list(email_cache.keys())[num-1]
-                    full_email = get_email_by_number(num)
+                    full_email = get_email_by_number_unified(num)
                     if full_email:
                         print("\nFull email details:")
                         print(f"Subject: {full_email.get('subject')}")

@@ -102,38 +102,34 @@ class OutlookSessionManager:
 
     def get_folder(self, folder_name: Optional[str] = None):
         """Get specified folder or default inbox"""
-        try:
-            # Handle string "null" as well as actual None
-            if not folder_name or folder_name == "null" or folder_name.lower() == "inbox":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.INBOX)
-                return folder
-            elif folder_name.lower() == "sent items" or folder_name.lower() == "sent":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.SENT_MAIL)
-                return folder
-            elif folder_name.lower() == "deleted items" or folder_name.lower() == "trash":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.DELETED_ITEMS)
-                return folder
-            elif folder_name.lower() == "drafts":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.DRAFTS)
-                return folder
-            elif folder_name.lower() == "outbox":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.OUTBOX)
-                return folder
-            elif folder_name.lower() == "calendar":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.CALENDAR)
-                return folder
-            elif folder_name.lower() == "contacts":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.CONTACTS)
-                return folder
-            elif folder_name.lower() == "tasks":
-                folder = self.namespace.GetDefaultFolder(OutlookFolderType.TASKS)
-                return folder
-            else:
-                folder = self._get_folder_by_name(folder_name)
-                return folder
-        except Exception as e:
-            logger.error(f"Error getting folder: {str(e)}")
-            raise
+        # Handle string "null" as well as actual None
+        if not folder_name or folder_name == "null" or folder_name.lower() == "inbox":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.INBOX)
+            return folder
+        elif folder_name.lower() == "sent items" or folder_name.lower() == "sent":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.SENT_MAIL)
+            return folder
+        elif folder_name.lower() == "deleted items" or folder_name.lower() == "trash":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.DELETED_ITEMS)
+            return folder
+        elif folder_name.lower() == "drafts":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.DRAFTS)
+            return folder
+        elif folder_name.lower() == "outbox":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.OUTBOX)
+            return folder
+        elif folder_name.lower() == "calendar":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.CALENDAR)
+            return folder
+        elif folder_name.lower() == "contacts":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.CONTACTS)
+            return folder
+        elif folder_name.lower() == "tasks":
+            folder = self.namespace.GetDefaultFolder(OutlookFolderType.TASKS)
+            return folder
+        else:
+            folder = self._get_folder_by_name(folder_name)
+            return folder
 
     def _get_folder_by_name(self, folder_name: str):
         """Find folder by name in folder hierarchy, supporting nested paths and mailbox-specific paths"""

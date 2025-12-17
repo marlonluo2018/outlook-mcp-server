@@ -53,14 +53,42 @@ def _ensure_cache_dir_exists():
         os.makedirs(CACHE_BASE_DIR, exist_ok=True)
 
 
+# Performance optimization: Cache parsed datetime objects to avoid repeated parsing
+_email_time_cache = {}
+
+def _parse_email_time(received_time_str: str):
+    """Parse email time with caching to avoid repeated parsing."""
+    if received_time_str in _email_time_cache:
+        return _email_time_cache[received_time_str]
+    
+    try:
+        # Handle different datetime formats
+        if 'T' in received_time_str:
+            # ISO format: 2025-12-17 23:31:02.980000
+            # Remove microseconds if present
+            if '.' in received_time_str:
+                parts = received_time_str.split('.')
+                received_time_str = parts[0]
+            parsed_time = datetime.fromisoformat(received_time_str)
+        else:
+            # Try other formats
+            parsed_time = datetime.strptime(received_time_str, "%m/%d/%y %H:%M:%S")
+    except (ValueError, TypeError):
+        parsed_time = datetime.min
+    
+    # Cache the result
+    _email_time_cache[received_time_str] = parsed_time
+    return parsed_time
+
+
 def add_email_to_cache(email_id: str, email_data: dict):
-    """Add an email to the cache with size management.
+    """Add an email to the cache with size management, sorted by received time.
 
     Args:
         email_id: The unique identifier for email
         email_data: The email data to store in the cache
     """
-    global email_cache, email_cache_order
+    global email_cache, email_cache_order, _email_time_cache
 
     # If email already exists, remove it from order list first
     if email_id in email_cache:
@@ -69,14 +97,76 @@ def add_email_to_cache(email_id: str, email_data: dict):
         except ValueError:
             pass
 
-    # Add to cache and update order
+    # Add to cache
     email_cache[email_id] = email_data
-    email_cache_order.append(email_id)
+    
+    # Parse received time once and cache it
+    received_time_str = email_data.get("received_time", "")
+    email_received_time = _parse_email_time(received_time_str)
+    
+    # Use binary search for insertion if list is large
+    if len(email_cache_order) > 20:  # Use binary search for larger lists
+        import bisect
+        
+        # Create a list of timestamps for binary search (most recent = largest timestamp)
+        # We use negative timestamps so bisect works correctly (most recent first)
+        timestamps = []
+        for id in email_cache_order:
+            try:
+                timestamp = -_parse_email_time(email_cache.get(id, {}).get("received_time", "")).timestamp()
+                timestamps.append(timestamp)
+            except (AttributeError, OSError) as e:
+                # Skip problematic timestamps
+                timestamps.append(float('-inf'))  # Put at the end
+        
+        try:
+            insert_pos = bisect.bisect_left(timestamps, -email_received_time.timestamp())
+        except (AttributeError, OSError) as e:
+            # Fallback to linear search if timestamp calculation fails
+            insert_pos = len(email_cache_order)
+    else:
+        # Use linear search for small lists
+        insert_pos = len(email_cache_order)
+        for i, existing_id in enumerate(email_cache_order):
+            try:
+                existing_time = _parse_email_time(email_cache.get(existing_id, {}).get("received_time", ""))
+                if email_received_time > existing_time:  # More recent emails come first
+                    insert_pos = i
+                    break
+            except (AttributeError, OSError):
+                # Skip problematic emails
+                continue
+    
+    email_cache_order.insert(insert_pos, email_id)
 
     # Enforce cache size limit - remove oldest entries if over limit
     while len(email_cache) > MAX_CACHE_SIZE:
-        oldest_id = email_cache_order.pop(0)  # Remove oldest from order list
+        oldest_id = email_cache_order.pop(-1)  # Remove oldest from the end (least recent)
         del email_cache[oldest_id]  # Remove from cache
+        
+        # Note: Time cache cleanup is handled when email_data is retrieved before deletion
+        # No additional cleanup needed here
+
+
+def clear_email_cache():
+    """Clear the email cache both in memory and on disk."""
+    global email_cache, email_cache_order, _email_time_cache
+
+    # Clear in-memory cache
+    email_cache.clear()
+    email_cache_order.clear()
+    _email_time_cache.clear()  # Clear time cache as well
+
+    # Clear disk cache
+    try:
+        cache_file = _get_cache_file()
+        if os.path.exists(cache_file):
+            os.remove(cache_file)
+    except Exception as e:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to clear email cache from disk: {e}")
 
 
 def _async_cache_saver():
@@ -137,9 +227,12 @@ def save_email_cache(force_save=False):
         if email_cache:
             save_email_cache._pending_save_count += 1
             
-            # PERFORMANCE OPTIMIZATION: Save only if forced or reached larger batch size
-            # Increased from 100 to 200 to reduce I/O operations
-            if force_save or save_email_cache._pending_save_count >= BATCH_SAVE_SIZE:
+            # UVX COMPATIBILITY: Save more frequently for UVX environments
+            # Reduce batch size for UVX to ensure data persistence
+            uvx_batch_size = BATCH_SAVE_SIZE // 2  # Half of normal batch size
+            
+            # Save only if forced or reached batch size
+            if force_save or save_email_cache._pending_save_count >= uvx_batch_size:
                 # PERFORMANCE OPTIMIZATION: Check time interval to avoid too frequent saves
                 current_time = time.time()
                 if not force_save and (current_time - _last_cache_save_time) < CACHE_SAVE_INTERVAL:
@@ -195,6 +288,10 @@ def load_email_cache():
             else:
                 # Fallback: use cache keys (order not preserved)
                 email_cache_order = list(email_cache.keys())
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Loaded {len(email_cache)} emails from persistent cache")
         else:
             # Initialize empty cache if data is invalid
             email_cache = {}
@@ -236,24 +333,42 @@ def get_email_from_cache(email_number: int) -> Optional[dict]:
     return email_cache.get(email_id)
 
 
-def clear_email_cache():
-    """Clear the email cache both in memory and on disk."""
+def immediate_save_cache():
+    """Immediately save the email cache to disk for UVX compatibility.
+    
+    This function ensures cache persistence between UVX process instances
+    by bypassing the batching mechanism and writing directly to disk.
+    """
     global email_cache, email_cache_order
-
-    # Clear in-memory cache
-    email_cache.clear()
-    email_cache_order.clear()
-
-    # Clear disk cache
+    
+    if not email_cache:
+        return
+        
     try:
+        # Use temporary file for atomic write
         cache_file = _get_cache_file()
-        if os.path.exists(cache_file):
-            os.remove(cache_file)
+        temp_file = cache_file + '.tmp'
+        
+        cache_data = {
+            "cache": email_cache,
+            "cache_order": email_cache_order,
+            "timestamp": datetime.now().isoformat(),
+        }
+        
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f, ensure_ascii=False)
+        
+        # Atomic rename
+        os.replace(temp_file, cache_file)
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Immediately saved {len(email_cache)} emails to cache")
+        
     except Exception as e:
         import logging
-
         logger = logging.getLogger(__name__)
-        logger.warning(f"Failed to clear email cache from disk: {e}")
+        logger.warning(f"Failed to immediately save email cache: {e}")
 
 
 # Load cache when module is imported

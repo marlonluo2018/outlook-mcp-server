@@ -4,19 +4,17 @@ from .backend.outlook_session import OutlookSessionManager
 
 # Import shared module to ensure cache is loaded on startup
 from .backend import shared
-from .backend.email_retrieval import (
+from .backend.email_search import (
     list_folders,
     search_email_by_subject,
     search_email_by_from,
     search_email_by_to,
     search_email_by_body,
     view_email_cache,
-    get_email_by_number,
-    get_email_by_number_unified,
-    format_email_with_media,
     list_recent_emails,
     get_emails_from_folder,
 )
+from .backend.email_data_extractor import get_email_by_number_unified, format_email_with_media
 from .backend.shared import clear_email_cache, add_email_to_cache, save_email_cache
 from .backend.email_composition import reply_to_email_by_number, compose_email
 from .backend.batch_operations import batch_forward_emails
@@ -85,10 +83,38 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
             "text": "Found X emails from last Y days. Use 'view_email_cache_tool' to view them."
         }
     """
+    # Input validation
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
-    count_result = list_recent_emails(folder_name=folder_name, days=days)
-    return {"type": "text", "text": count_result}
+    
+    # Ensure folder_name is a string or None
+    if folder_name is not None and not isinstance(folder_name, str):
+        raise ValueError("Folder name must be a string or None")
+    
+    # Log the request for debugging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"list_recent_emails_tool called with days={days}, folder_name={folder_name}")
+    
+    # If folder_name is None, use the default
+    if folder_name is None:
+        folder_name = "Inbox"
+    
+    try:
+        logger.info(f"Calling list_recent_emails with folder={folder_name}, days={days}")
+        count_result = list_recent_emails(folder_name=folder_name, days=days)
+        logger.info(f"list_recent_emails returned: {count_result}")
+        
+        # Add debugging info
+        from .backend.shared import email_cache
+        debug_info = f"\n\nDEBUG: Cache contains {len(email_cache)} emails"
+        
+        return {"type": "text", "text": count_result + debug_info}
+    except Exception as e:
+        logger.error(f"Error in list_recent_emails_tool: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"type": "text", "text": f"Error retrieving emails: {str(e)}"}
 
 
 @mcp.tool
