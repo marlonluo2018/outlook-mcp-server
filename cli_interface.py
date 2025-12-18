@@ -5,16 +5,16 @@ from typing import Optional
 # Import handling for both direct execution and module usage
 try:
     # First try imports from outlook_mcp_server package (direct execution)
-    from outlook_mcp_server.backend.outlook_session import OutlookSessionManager
+    from outlook_mcp_server.backend.outlook_session.session_manager import OutlookSessionManager
     from outlook_mcp_server.backend.email_search import (
         list_recent_emails,
         search_email_by_subject,
         search_email_by_from,
         search_email_by_to,
         search_email_by_body,
-        list_folders,
-        view_email_cache
+        list_folders
     )
+    from outlook_mcp_server.tools.viewing_tools import view_email_cache_tool as view_email_cache
     from outlook_mcp_server.backend.email_data_extractor import get_email_by_number_unified
     from outlook_mcp_server.backend.email_composition import (
         compose_email,
@@ -25,16 +25,16 @@ try:
 except ImportError:
     try:
         # Then try relative imports (module usage)
-        from .backend.outlook_session import OutlookSessionManager
+        from .backend.outlook_session.session_manager import OutlookSessionManager
         from .backend.email_search import (
             list_recent_emails,
             search_email_by_subject,
             search_email_by_from,
             search_email_by_to,
             search_email_by_body,
-            list_folders,
-            view_email_cache
+            list_folders
         )
+        from .tools.viewing_tools import view_email_cache_tool as view_email_cache
         from .backend.email_data_extractor import get_email_by_number_unified
         from .backend.email_composition import (
             compose_email,
@@ -45,16 +45,16 @@ except ImportError:
     except ImportError:
         # Finally try direct imports from same directory
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from outlook_mcp_server.backend.outlook_session import OutlookSessionManager
+        from outlook_mcp_server.backend.outlook_session.session_manager import OutlookSessionManager
         from outlook_mcp_server.backend.email_search import (
             list_recent_emails,
             search_email_by_subject,
             search_email_by_from,
             search_email_by_to,
             search_email_by_body,
-            list_folders,
-            view_email_cache
+            list_folders
         )
+        from outlook_mcp_server.tools.viewing_tools import view_email_cache_tool as view_email_cache
         from outlook_mcp_server.backend.email_data_extractor import get_email_by_number_unified
         from outlook_mcp_server.backend.email_composition import (
             compose_email,
@@ -80,7 +80,6 @@ def show_menu():
     print("13. Remove folder")
     print("14. Move email")
     print("15. Delete email")
-    print("16. Policy management")
     print("0. Exit")
 
 def interactive_mode():
@@ -363,73 +362,6 @@ def interactive_mode():
                 except Exception as e:
                     print(f"\nError deleting email: {str(e)}")
                     
-            elif choice == "16":
-                # Policy management
-                print("\nPolicy Management")
-                print("1. Check assigned policies for an email")
-                print("2. Check available policies")
-                print("3. Assign policy to email")
-                print("0. Back to main menu")
-                
-                policy_choice = input("\nEnter policy command number: ").strip()
-                
-                if policy_choice == "0":
-                    continue
-                    
-                if policy_choice in ["1", "3"] and not email_cache:
-                    print("\nNo emails in cache - load emails first")
-                    continue
-                    
-                try:
-                    with OutlookSessionManager() as outlook_session:
-                        if policy_choice == "1":
-                            # Check assigned policies
-                            num = int(input("Enter email number: ").strip())
-                            if num < 1 or num > len(email_cache):
-                                print("\nInvalid email number")
-                                continue
-                                
-                            email_id = list(email_cache.keys())[num-1]
-                            policies = outlook_session.get_email_policies(email_id)
-                            
-                            if policies:
-                                print(f"\nAssigned policies for email {num}:")
-                                for policy in policies:
-                                    print(f"- {policy}")
-                            else:
-                                print(f"\nNo policies assigned to email {num}")
-                            
-                        elif policy_choice == "2":
-                            # Check available policies
-                            available_policies = outlook_session.get_available_policies()
-                            print("\nAvailable policies:")
-                            for policy in available_policies:
-                                print(f"- {policy}")
-                            
-                        elif policy_choice == "3":
-                            # Assign policy to email
-                            num = int(input("Enter email number: ").strip())
-                            if num < 1 or num > len(email_cache):
-                                print("\nInvalid email number")
-                                continue
-                                
-                            email_id = list(email_cache.keys())[num-1]
-                            
-                            # Show available policies
-                            print("\nAvailable policies:")
-                            available_policies = outlook_session.get_available_policies()
-                            for policy in available_policies:
-                                print(f"- {policy}")
-                                
-                            policy = input("\nEnter policy name to assign: ").strip()
-                            result = outlook_session.assign_policy(email_id, policy)
-                            print(f"\n{result}")
-                            
-                except ValueError:
-                    print("\nInvalid input - must be a number")
-                except Exception as e:
-                    print(f"\nError in policy management: {str(e)}")
-            
             elif choice == "0":
                 break
                 

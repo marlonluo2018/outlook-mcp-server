@@ -1,7 +1,7 @@
 import csv
 import logging
 
-from .outlook_session import OutlookSessionManager
+from .outlook_session.session_manager import OutlookSessionManager
 from .shared import email_cache
 from .utils import safe_encode_text, validate_email_address
 

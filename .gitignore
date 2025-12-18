@@ -1,32 +1,63 @@
-claude_desktop_config.json
-__pycache__/batch_operations.cpython-311.pyc
-__pycache__/email_composition.cpython-311.pyc
-__pycache__/email_retrieval.cpython-311.pyc
-__pycache__/outlook_operations.cpython-311.pyc
-__pycache__/outlook_operations.cpython-311.pyc
-__pycache__/outlook_session.cpython-311.pyc
-__pycache__/shared.cpython-311.pyc
-__pycache__/outlook_operations.cpython-311.pyc
-__pycache__/outlook_operations.cpython-311.pyc
-backend/__pycache__/batch_operations.cpython-311.pyc
-backend/__pycache__/email_composition.cpython-311.pyc
-backend/__pycache__/email_retrieval.cpython-311.pyc
-backend/__pycache__/outlook_session.cpython-311.pyc
-backend/__pycache__/shared.cpython-311.pyc
-__pycache__/outlook_mcp_server.cpython-311.pyc
-.gitignore
-outlook_mcp_server/__pycache__/__init__.cpython-311.pyc
-outlook_mcp_server/backend/__pycache__/__init__.cpython-311.pyc
-outlook_mcp_server/backend/__pycache__/email_composition.cpython-311.pyc
-outlook_mcp_server/backend/__pycache__/email_retrieval.cpython-311.pyc
-outlook_mcp_server/backend/__pycache__/outlook_session.cpython-311.pyc
-outlook_mcp_server/backend/__pycache__/shared.cpython-311.pyc
-outlook_mcp_server/backend/__pycache__/batch_operations.cpython-311.pyc
-.gitignore
-__pycache__/cli_interface.cpython-311.pyc
-outlook_mcp_server/__pycache__/__main__.cpython-311.pyc
-.gitignore
-.gitignore
-outlook_mcp_server/backend/__pycache__/utils.cpython-311.pyc
-outlook_mcp_server/backend/__pycache__/validators.cpython-311.pyc
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Test coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version

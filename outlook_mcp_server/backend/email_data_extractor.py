@@ -3,7 +3,7 @@
 import logging
 from typing import Dict, Any, Optional
 
-from .outlook_session import OutlookSessionManager
+from .outlook_session.session_manager import OutlookSessionManager
 from .utils import OutlookItemClass, safe_encode_text
 from .email_utils import _format_recipient_for_display
 from .shared import email_cache, email_cache_order
@@ -22,7 +22,8 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
         sender_name = str(sender)
     
     result = {
-        "id": email.get("id", ""),
+        "id": email.get("id", email.get("entry_id", "")),
+        "entry_id": email.get("id", email.get("entry_id", "")),
         "subject": email.get("subject", "No Subject"),
         "sender": sender_name,
         "from": sender_name,  # Alias for compatibility
@@ -56,7 +57,7 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
                 logger.error("Namespace does not have GetItemFromID method")
                 return result
                 
-            item = session.namespace.GetItemFromID(email["id"])
+            item = session.namespace.GetItemFromID(email.get("entry_id", email.get("id", "")))
             if not item or item.Class != OutlookItemClass.MAIL_ITEM:
                 logger.warning(f"Email not found or not a mail item")
                 return result
@@ -65,6 +66,51 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
             result["body"] = safe_encode_text(getattr(item, "Body", ""), "body")
             result["html_body"] = safe_encode_text(getattr(item, "HTMLBody", ""), "html_body") if hasattr(item, "HTMLBody") else ""
             result["body_format"] = getattr(item, "BodyFormat", 1)  # 1=Plain, 2=HTML, 3=RichText
+            
+            # Extract attachment details if not already cached
+            if hasattr(item, 'Attachments') and item.Attachments and item.Attachments.Count > 0:
+                attachments = []
+                try:
+                    for i in range(item.Attachments.Count):
+                        attachment = item.Attachments.Item(i + 1)
+                        file_name = getattr(attachment, 'FileName', getattr(attachment, 'DisplayName', 'Unknown'))
+                        
+                        # Check if it's an embedded image
+                        is_embedded = False
+                        try:
+                            if hasattr(attachment, 'PropertyAccessor'):
+                                content_id = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
+                                is_embedded = content_id is not None and len(str(content_id)) > 0
+                        except:
+                            pass
+                        
+                        # Additional check for image files with common embedded naming pattern
+                        if not is_embedded:
+                            is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))
+                            if is_image and file_name.lower().startswith('image'):
+                                is_embedded = True
+                        
+                        # PDF files are always considered real attachments
+                        is_pdf = file_name.lower().endswith('.pdf')
+                        if is_pdf:
+                            is_embedded = False
+                        
+                        # Only add non-embedded attachments to the list
+                        if not is_embedded:
+                            attachment_info = {
+                                "name": file_name,
+                                "size": getattr(attachment, 'Size', 0),
+                                "type": getattr(attachment, 'Type', 1)  # 1 = ByValue, 2 = ByReference, 3 = Embedded, 4 = OLE
+                            }
+                            attachments.append(attachment_info)
+                    
+                    # Update has_attachments flag and attachments list
+                    result["attachments"] = attachments
+                    result["has_attachments"] = len(attachments) > 0
+                except Exception as e:
+                    logger.debug(f"Error extracting attachment details: {e}")
+                    result["attachments"] = []
+                    result["has_attachments"] = False
             
             # Enhanced metadata
             result["importance"] = getattr(item, "Importance", 1)  # 0=Low, 1=Normal, 2=High

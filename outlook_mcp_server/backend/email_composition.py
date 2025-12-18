@@ -3,8 +3,8 @@
 from typing import List, Optional, Union
 import logging
 
-from .outlook_session import OutlookSessionManager
-from .shared import email_cache
+from .outlook_session.session_manager import OutlookSessionManager
+from .shared import email_cache, email_cache_order
 from .utils import safe_encode_text, normalize_email_address
 from .validators import EmailReplyParams, EmailComposeParams
 
@@ -46,18 +46,30 @@ def reply_to_email_by_number(
     cc_recipients = params.cc_recipients
     reply_text = params.reply_text
 
-    if not email_cache:
+    if not email_cache_order:
         raise ValueError("No emails available - please list emails first.")
 
-    cache_items = list(email_cache.values())
-    if not 1 <= email_number <= len(cache_items):
+    if not 1 <= email_number <= len(email_cache_order):
         raise ValueError(f"Email #{email_number} not found in current listing.")
 
-    cached_email = cache_items[email_number - 1]
+    # Get the entry_id from the cache order
+    entry_id = email_cache_order[email_number - 1]
+    if not entry_id:
+        raise ValueError(f"Email #{email_number} has no entry ID")
+
+    # Get the cached email data
+    cached_email = email_cache.get(entry_id)
+    if not cached_email:
+        raise ValueError(f"Email #{email_number} data not found in cache")
 
     with OutlookSessionManager() as session:
         try:
-            email = session.namespace.GetItemFromID(cached_email["id"])
+            # Get the email ID, handling different key names that might be used
+            email_id = cached_email.get("id") or cached_email.get("entry_id")
+            if not email_id:
+                raise ValueError(f"Email ID not found in cached data. Available keys: {list(cached_email.keys())}")
+            
+            email = session.namespace.GetItemFromID(email_id)
             if not email:
                 raise RuntimeError("Could not retrieve the email from Outlook.")
 
