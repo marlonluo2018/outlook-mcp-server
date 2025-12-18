@@ -105,29 +105,10 @@ def move_email_tool(email_number: int, target_folder_name: str) -> dict:
         raise ValueError("Target folder name must be a non-empty string")
 
     try:
-        # First get the email from cache to get the email ID
-        from ..backend.email_data_extractor import get_email_by_number_unified
-        email_data = get_email_by_number_unified(email_number)
-        
-        if email_data is None:
-            return {
-                "type": "text",
-                "text": f"No email found at position {email_number}. Please load emails first using list_recent_emails or search_emails.",
-            }
-
-        # Get the email ID (EntryID) from the cached data
-        email_id = email_data.get("id", "")
-        if not email_id:
-            return {
-                "type": "text",
-                "text": "Email data is missing the required ID for moving.",
-            }
-
-        # Now move the email using the email number
-        with OutlookSessionManager() as outlook_session:
-            result = outlook_session.move_email_to_folder(email_number, target_folder_name)
-            
-            return {"type": "text", "text": result}
+        # Use direct email operations instead of session manager wrapper
+        from ..backend.outlook_session.email_operations import move_email_to_folder
+        result = move_email_to_folder(email_number, target_folder_name)
+        return {"type": "text", "text": result}
     except Exception as e:
         return {"type": "text", "text": f"Error moving email: {str(e)}"}
 
@@ -153,28 +134,9 @@ def delete_email_by_number_tool(email_number: int) -> dict:
         raise ValueError("Email number must be a positive integer")
 
     try:
-        # First get the email from cache to get the email ID
-        from ..backend.email_data_extractor import get_email_by_number_unified
-        email_data = get_email_by_number_unified(email_number)
-        
-        if email_data is None:
-            return {
-                "type": "text",
-                "text": f"No email found at position {email_number}. Please load emails first using list_recent_emails or search_emails.",
-            }
-
-        # Get the email ID (EntryID) from the cached data
-        email_id = email_data.get("id", "")
-        if not email_id:
-            return {
-                "type": "text",
-                "text": "Email data is missing the required ID for deletion.",
-            }
-
-        # Now delete the email using the email number
-        with OutlookSessionManager() as outlook_session:
-            result = outlook_session.delete_email_by_number(email_number)
-            
-            return {"type": "text", "text": result}
+        # Use direct email operations instead of session manager wrapper
+        from ..backend.outlook_session.email_operations import delete_email_by_number
+        result = delete_email_by_number(email_number)
+        return {"type": "text", "text": result}
     except Exception as e:
         return {"type": "text", "text": f"Error deleting email: {str(e)}"}

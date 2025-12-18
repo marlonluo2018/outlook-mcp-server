@@ -2,6 +2,7 @@
 
 from typing import Optional
 from ..backend.outlook_session import OutlookSessionManager
+from ..backend.outlook_session.folder_operations import FolderOperations
 
 
 def move_folder_tool(source_folder_path: str, target_parent_path: str) -> dict:
@@ -31,8 +32,9 @@ def move_folder_tool(source_folder_path: str, target_parent_path: str) -> dict:
         raise ValueError("Target parent path must be a non-empty string")
 
     try:
-        with OutlookSessionManager() as outlook_session:
-            result = outlook_session.move_folder(source_folder_path, target_parent_path)
+        with OutlookSessionManager() as session_manager:
+            folder_ops = FolderOperations(session_manager)
+            result = folder_ops.move_folder(source_folder_path, target_parent_path)
             return {"type": "text", "text": result}
     except Exception as e:
         return {"type": "text", "text": f"Error moving folder: {str(e)}"}
@@ -46,10 +48,12 @@ def get_folder_list_tool() -> dict:
 
     """
     try:
-        with OutlookSessionManager() as outlook_session:
+        with OutlookSessionManager() as session_manager:
+            folder_ops = FolderOperations(session_manager)
+            folders = folder_ops.get_folder_list()
             result = []
             # Build hierarchy
-            for folder in outlook_session.outlook_namespace.Folders:
+            for folder in folders:
                 result.append(folder.Name)  # Email account level
                 result.extend(_get_subfolder_lines(folder, "  "))
             return {"type": "text", "text": "\n".join(result)}
@@ -91,8 +95,9 @@ def create_folder_tool(folder_name: str, parent_folder_name: Optional[str] = Non
         raise ValueError("Folder name must be a non-empty string")
     
     try:
-        with OutlookSessionManager() as outlook_session:
-            result = outlook_session.create_folder(folder_name, parent_folder_name)
+        with OutlookSessionManager() as session_manager:
+            folder_ops = FolderOperations(session_manager)
+            result = folder_ops.create_folder(folder_name, parent_folder_name)
             return {"type": "text", "text": result}
     except Exception as e:
         return {"type": "text", "text": f"Error creating folder: {str(e)}"}
@@ -119,8 +124,9 @@ def remove_folder_tool(folder_name: str) -> dict:
         raise ValueError("Folder name must be a non-empty string")
 
     try:
-        with OutlookSessionManager() as outlook_session:
-            result = outlook_session.remove_folder(folder_name)
+        with OutlookSessionManager() as session_manager:
+            folder_ops = FolderOperations(session_manager)
+            result = folder_ops.remove_folder(folder_name)
             return {"type": "text", "text": result}
     except Exception as e:
         return {"type": "text", "text": f"Error removing folder: {str(e)}"}
