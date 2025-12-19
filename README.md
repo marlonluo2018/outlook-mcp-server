@@ -172,6 +172,21 @@ Use this configuration in your MCP client settings:
 
 **Quick Setup**: Use the provided `mcp-config-direct.json` file
 
+#### ⚙️ **Configuration Option 3: Direct Path Configuration**
+**Purpose**: For users who need to specify the exact path to the main module
+
+**Configuration in your MCP client settings:**
+```json
+{
+  "mcpServers": {
+    "outlook-mcp-server": {
+      "command": "python",
+      "args": ["C:\\Project\\outlook-mcp-server\\outlook_mcp_server\\__main__.py"]
+    }
+  }
+}
+```
+
 ## 🤖 AI Assistant System Prompt
 
 Your AI assistant uses a specialized prompt template that defines its role and behavior. This ensures safe and effective email management.
