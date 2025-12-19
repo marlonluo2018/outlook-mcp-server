@@ -29,13 +29,31 @@ def is_server_search_supported(search_type: str) -> bool:
     return search_type in ["subject", "sender", "recipient"]
 
 
+# COM attribute cache to avoid repeated access
+_com_attribute_cache = {}
+
+def _get_cached_com_attribute(item, attr_name, default=None):
+    """Get COM attribute with caching to avoid repeated access."""
+    try:
+        item_id = getattr(item, 'EntryID', '')
+        if not item_id:
+            return getattr(item, attr_name, default)
+            
+        cache_key = f"{item_id}:{attr_name}"
+        if cache_key not in _com_attribute_cache:
+            _com_attribute_cache[cache_key] = getattr(item, attr_name, default)
+        return _com_attribute_cache[cache_key]
+    except Exception:
+        return default
+
 def extract_email_info(item) -> Dict[str, Any]:
-    """Extract basic email information from an Outlook item."""
+    """Extract basic email information from an Outlook item with optimized COM access."""
+    # Single-pass COM attribute extraction with caching
     email_info = {
-        "subject": getattr(item, 'Subject', 'No Subject'),
-        "sender": getattr(item, 'SenderName', 'Unknown'),
-        "received_time": getattr(item, 'ReceivedTime', None),
-        "entry_id": getattr(item, 'EntryID', ''),
+        "subject": _get_cached_com_attribute(item, 'Subject', 'No Subject'),
+        "sender": _get_cached_com_attribute(item, 'SenderName', 'Unknown'),
+        "received_time": _get_cached_com_attribute(item, 'ReceivedTime', None),
+        "entry_id": _get_cached_com_attribute(item, 'EntryID', ''),
     }
     
     # Handle None received_time
@@ -44,95 +62,103 @@ def extract_email_info(item) -> Dict[str, Any]:
     else:
         email_info["received_time"] = str(email_info["received_time"])
     
-    # Extract To recipients - prioritize Recipients collection over To field
+    # Extract To recipients - optimized with single-pass COM access
     try:
         to_recipients = []
         
-        # First try to get from Recipients collection (more reliable)
-        if hasattr(item, 'Recipients') and item.Recipients:
+        # Use cached recipients collection access
+        recipients = _get_cached_com_attribute(item, 'Recipients')
+        if recipients:
             try:
-                for recipient in item.Recipients:
-                    if recipient.Type == 1:  # 1 = To recipient
+                for recipient in recipients:
+                    if _get_cached_com_attribute(recipient, 'Type') == 1:  # 1 = To recipient
                         recipient_info = {
-                            "address": getattr(recipient, 'Address', ''),
-                            "name": getattr(recipient, 'Name', '')
+                            "address": _get_cached_com_attribute(recipient, 'Address', ''),
+                            "name": _get_cached_com_attribute(recipient, 'Name', '')
                         }
                         if recipient_info["address"] or recipient_info["name"]:
                             to_recipients.append(recipient_info)
             except Exception as e:
-                print(f"Error extracting from Recipients collection: {e}")
+                logger.debug(f"Error extracting from Recipients collection: {e}")
         
         # Fallback to To field if Recipients collection didn't work
-        if not to_recipients and hasattr(item, 'To') and item.To:
-            try:
-                # Parse To field which might be a semicolon-separated string
-                to_list = str(item.To).split(';')
-                for to_addr in to_list:
-                    to_addr = to_addr.strip()
-                    if to_addr:
-                        to_recipients.append({"address": to_addr, "name": to_addr})
-            except Exception as e:
-                print(f"Error extracting from To field: {e}")
+        if not to_recipients:
+            to_field = _get_cached_com_attribute(item, 'To')
+            if to_field:
+                try:
+                    # Parse To field which might be a semicolon-separated string
+                    to_list = str(to_field).split(';')
+                    for to_addr in to_list:
+                        to_addr = to_addr.strip()
+                        if to_addr:
+                            to_recipients.append({"address": to_addr, "name": to_addr})
+                except Exception as e:
+                    logger.debug(f"Error extracting from To field: {e}")
         
         email_info["to_recipients"] = to_recipients
     except Exception as e:
-        print(f"Error in To recipient extraction: {e}")
+        logger.debug(f"Error in To recipient extraction: {e}")
         email_info["to_recipients"] = []
     
-    # Extract CC recipients - prioritize Recipients collection over CC field
+    # Extract CC recipients - optimized with single-pass COM access
     try:
         cc_recipients = []
         
-        # First try to get from Recipients collection (more reliable)
-        if hasattr(item, 'Recipients') and item.Recipients:
+        # Use cached recipients collection access
+        recipients = _get_cached_com_attribute(item, 'Recipients')
+        if recipients:
             try:
-                for recipient in item.Recipients:
-                    if recipient.Type == 2:  # 2 = CC recipient
+                for recipient in recipients:
+                    if _get_cached_com_attribute(recipient, 'Type') == 2:  # 2 = CC recipient
                         recipient_info = {
-                            "address": getattr(recipient, 'Address', ''),
-                            "name": getattr(recipient, 'Name', '')
+                            "address": _get_cached_com_attribute(recipient, 'Address', ''),
+                            "name": _get_cached_com_attribute(recipient, 'Name', '')
                         }
                         if recipient_info["address"] or recipient_info["name"]:
                             cc_recipients.append(recipient_info)
             except Exception as e:
-                print(f"Error extracting CC from Recipients collection: {e}")
+                logger.debug(f"Error extracting CC from Recipients collection: {e}")
         
         # Fallback to CC field if Recipients collection didn't work
-        if not cc_recipients and hasattr(item, 'CC') and item.CC:
-            try:
-                # Parse CC field which might be a semicolon-separated string
-                cc_list = str(item.CC).split(';')
-                for cc_addr in cc_list:
-                    cc_addr = cc_addr.strip()
-                    if cc_addr:
-                        cc_recipients.append({"address": cc_addr, "name": cc_addr})
-            except Exception as e:
-                print(f"Error extracting from CC field: {e}")
+        if not cc_recipients:
+            cc_field = _get_cached_com_attribute(item, 'CC')
+            if cc_field:
+                try:
+                    # Parse CC field which might be a semicolon-separated string
+                    cc_list = str(cc_field).split(';')
+                    for cc_addr in cc_list:
+                        cc_addr = cc_addr.strip()
+                        if cc_addr:
+                            cc_recipients.append({"address": cc_addr, "name": cc_addr})
+                except Exception as e:
+                    logger.debug(f"Error extracting from CC field: {e}")
         
         email_info["cc_recipients"] = cc_recipients
     except Exception as e:
-        print(f"Error in CC recipient extraction: {e}")
+        logger.debug(f"Error in CC recipient extraction: {e}")
         email_info["cc_recipients"] = []
     
-    # Extract additional useful information
+    # Extract additional useful information with optimized COM access
     try:
-        email_info["unread"] = getattr(item, 'UnRead', False)
-        has_attachments = hasattr(item, 'Attachments') and item.Attachments and item.Attachments.Count > 0
+        email_info["unread"] = _get_cached_com_attribute(item, 'UnRead', False)
+        attachments = _get_cached_com_attribute(item, 'Attachments')
+        has_attachments = attachments and hasattr(attachments, 'Count') and attachments.Count > 0
         email_info["has_attachments"] = has_attachments
         
         # Extract attachment information if present
         if has_attachments:
-            attachments = []
+            attachments_list = []
             try:
-                for i in range(item.Attachments.Count):
-                    attachment = item.Attachments.Item(i + 1)
-                    file_name = getattr(attachment, 'FileName', getattr(attachment, 'DisplayName', 'Unknown'))
+                for i in range(attachments.Count):
+                    attachment = attachments.Item(i + 1)
+                    file_name = _get_cached_com_attribute(attachment, 'FileName') or _get_cached_com_attribute(attachment, 'DisplayName', 'Unknown')
                     
                     # Check if it's an embedded image
                     is_embedded = False
                     try:
-                        if hasattr(attachment, 'PropertyAccessor'):
-                            content_id = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
+                        property_accessor = _get_cached_com_attribute(attachment, 'PropertyAccessor')
+                        if property_accessor:
+                            content_id = property_accessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
                             is_embedded = content_id is not None and len(str(content_id)) > 0
                     except:
                         pass
@@ -152,14 +178,14 @@ def extract_email_info(item) -> Dict[str, Any]:
                     if not is_embedded:
                         attachment_info = {
                             "name": file_name,
-                            "size": getattr(attachment, 'Size', 0),
-                            "type": getattr(attachment, 'Type', 1)  # 1 = ByValue, 2 = ByReference, 3 = Embedded, 4 = OLE
+                            "size": _get_cached_com_attribute(attachment, 'Size', 0),
+                            "type": _get_cached_com_attribute(attachment, 'Type', 1)  # 1 = ByValue, 2 = ByReference, 3 = Embedded, 4 = OLE
                         }
-                        attachments.append(attachment_info)
+                        attachments_list.append(attachment_info)
                 
                 # Update has_attachments flag based on real attachments only
-                email_info["has_attachments"] = len(attachments) > 0
-                email_info["attachments"] = attachments
+                email_info["has_attachments"] = len(attachments_list) > 0
+                email_info["attachments"] = attachments_list
             except Exception as e:
                 logger.debug(f"Error extracting attachment details: {e}")
                 email_info["attachments"] = []

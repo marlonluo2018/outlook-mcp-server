@@ -76,8 +76,25 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
             
             logger.info(f"Getting emails from folder '{params.folder_name}' for {params.days} days")
             
-            # OPTIMIZATION 1: Use smaller batch size for better performance (25 items)
-            batch_size = 25  # Reduced from 50 based on profiling
+            # Get total item count first (needed for batch size calculation)
+            total_items = folder.Items.Count if hasattr(folder.Items, 'Count') else 0
+            logger.info(f"Total items in folder: {total_items}")
+            
+            # OPTIMIZATION 1: Dynamic batch size based on folder size for optimal performance
+            def get_optimal_batch_size(folder_size, days_requested):
+                """Determine optimal batch size based on folder size and search parameters."""
+                if folder_size < 100:
+                    return 50  # Small folders: larger batches
+                elif folder_size < 500:
+                    return 75  # Medium folders: balanced approach
+                elif days_requested <= 1:
+                    return 100  # Recent searches: larger batches
+                elif days_requested <= 7:
+                    return 50  # Week searches: medium batches
+                else:
+                    return 25  # Long searches: smaller batches for better responsiveness
+            
+            batch_size = get_optimal_batch_size(total_items, params.days)
             
             # OPTIMIZATION 2: Adjust max_items based on days requested
             if params.days and params.days <= 1:
@@ -90,10 +107,6 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
                 max_items = 2000  # For longer searches, use higher limit
             
             filtered_items = []
-            
-            # Get total item count
-            total_items = folder.Items.Count if hasattr(folder.Items, 'Count') else 0
-            logger.info(f"Total items in folder: {total_items}")
             logger.info(f"Adjusted max_items limit for {params.days} days: {max_items}")
             
             # Calculate date limit if needed
@@ -111,6 +124,8 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
             
             # Track if we should stop early (when emails are too old)
             early_termination = False
+            consecutive_old_emails = 0  # OPTIMIZATION: Enhanced early termination counter
+            total_recent_emails = 0  # Track total recent emails found
             
             for batch_start in range(0, items_to_process, batch_size):
                 if early_termination:
@@ -140,15 +155,18 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
                                 if item_time.tzinfo is None:
                                     item_time = item_time.replace(tzinfo=timezone.utc)
                                 
-                                # OPTIMIZATION 8: Early termination if email is too old
-                                # Since we process newest first, we can stop when we find an old email
+                                # OPTIMIZATION 8: Enhanced early termination if email is too old
+                                # Since we process newest first, we can stop when we find consistently old emails
                                 if item_time < date_limit:
-                                    # Check if this is consistently happening (not just a misdated email)
-                                    if i > 10:  # Only terminate after processing some items
+                                    consecutive_old_emails += 1
+                                    # OPTIMIZATION: Increased threshold from 3 to 10 and require some recent emails first
+                                    if consecutive_old_emails >= 10 and total_recent_emails > 0:  # Only terminate after finding 10 consecutive old emails and some recent emails
                                         early_termination = True
-                                        logger.info(f"Early termination: Found email older than {params.days} days at position {i}")
+                                        logger.info(f"Early termination: Found {consecutive_old_emails} consecutive emails older than {params.days} days after {total_recent_emails} recent emails at position {i}")
                                         break
                                     continue
+                                else:
+                                    consecutive_old_emails = 0  # Reset counter when we find a recent email
                             except Exception:
                                 continue
                         
@@ -180,14 +198,30 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
             # Since we process in reverse order, items should already be newest first
             logger.info(f"Processing {len(filtered_items)} emails for caching")
             
-            # OPTIMIZATION 11: Batch cache operations
+            # OPTIMIZATION 11: Enhanced batch processing with bulk timestamp handling
             email_list = []
             cache_count = 0
             
+            # Pre-process timestamps in bulk for better cache performance
+            timestamp_cache = {}
             for item in filtered_items:
                 try:
-                    # OPTIMIZATION 12: Streamlined email extraction
+                    received_time = getattr(item, 'ReceivedTime', None)
+                    if received_time:
+                        entry_id = getattr(item, 'EntryID', '')
+                        timestamp_cache[entry_id] = received_time
+                except Exception:
+                    continue
+            
+            for item in filtered_items:
+                try:
+                    # OPTIMIZATION 12: Streamlined email extraction with cached timestamps
                     email_data = extract_email_info(item)
+                    
+                    # Use pre-cached timestamp for better performance
+                    entry_id = email_data.get("entry_id", "")
+                    if entry_id in timestamp_cache:
+                        email_data["received_time"] = str(timestamp_cache[entry_id])
                     
                     add_email_to_cache(email_data["entry_id"], email_data)
                     email_list.append(email_data)
