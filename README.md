@@ -193,7 +193,7 @@ Your AI assistant uses a specialized prompt template that defines its role and b
 
 ### Using the Prompt Template
 
-The system prompt is defined in `agent_prompt_template.md`. To customize it for your needs:
+The system prompt is defined in [`agent_prompt_template.md`](https://github.com/marlonluo2018/outlook-mcp-server/blob/main/agent_prompt_template.md). To customize it for your needs:
 
 1. **Edit the template file** to personalize the assistant's behavior
 2. **Replace placeholders** like `[User Name]` and `[User Email]` with your information
