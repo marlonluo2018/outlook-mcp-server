@@ -12,6 +12,7 @@ from typing import Optional
 from ..shared import configure_logging
 from ..utils import retry_on_com_error
 from .exceptions import ConnectionError
+from .folder_operations import FolderOperations
 
 # Initialize logging
 configure_logging()
@@ -26,6 +27,7 @@ class OutlookSessionManager:
         self.namespace = None
         self._connected = False
         self._com_initialized = False
+        self._folder_operations = None
 
     def __enter__(self):
         """Initialize Outlook COM objects."""
@@ -45,6 +47,7 @@ class OutlookSessionManager:
             self._com_initialized = True
             self.outlook = win32com.client.Dispatch("Outlook.Application")
             self.namespace = self.outlook.GetNamespace("MAPI")
+            self._folder_operations = FolderOperations(self)
             self._connected = True
             logger.info("Successfully connected to Outlook")
         except Exception as e:
@@ -111,3 +114,15 @@ class OutlookSessionManager:
     def outlook_namespace(self):
         """Get the Outlook namespace object."""
         return self.namespace
+
+    def get_folder(self, folder_name: Optional[str] = None):
+        """Get a folder by name using folder operations."""
+        if not self._folder_operations:
+            raise ConnectionError("Folder operations not initialized. Ensure Outlook is connected.")
+        return self._folder_operations.get_folder(folder_name)
+
+    def get_folder_emails(self, folder_name: str = "Inbox", max_emails: int = 100):
+        """Get emails from a folder using folder operations."""
+        if not self._folder_operations:
+            raise ConnectionError("Folder operations not initialized. Ensure Outlook is connected.")
+        return self._folder_operations.get_folder_emails(folder_name, max_emails)
