@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..outlook_session.session_manager import OutlookSessionManager
 from ..shared import email_cache, add_email_to_cache, clear_email_cache
 from ..validators import EmailSearchParams
-from .search_common import get_folder_path_safe, is_server_search_supported, extract_email_info
+from .search_common import get_folder_path_safe, is_server_search_supported, extract_email_info, unified_cache_load_workflow
 from .server_search import server_side_search
 
 # Set up logging
@@ -69,19 +69,34 @@ def unified_search(
             if not results:
                 return [], f"No emails found in '{folder_path}' matching '{search_term}'"
             
-            # Clear cache before adding new search results
-            clear_email_cache()
-            
-            # Convert results to cache format
+            # Convert results to email data format - OPTIMIZED
             email_list = []
-            for item in results:
-                try:
-                    email_data = extract_email_info(item)
-                    add_email_to_cache(email_data["entry_id"], email_data)
-                    email_list.append(email_data)
-                except Exception as e:
-                    logger.warning(f"Failed to cache email: {e}")
-                    continue
+            
+            # Clear COM cache before processing to prevent memory growth
+            from .search_common import clear_com_attribute_cache
+            clear_com_attribute_cache()
+            
+            # Process in batches for better performance
+            batch_size = 50
+            total_results = len(results)
+            
+            for batch_start in range(0, total_results, batch_size):
+                batch_end = min(batch_start + batch_size, total_results)
+                batch_items = results[batch_start:batch_end]
+                
+                # Process batch
+                for item in batch_items:
+                    try:
+                        email_data = extract_email_info(item)
+                        if email_data:
+                            email_list.append(email_data)
+                    except Exception as e:
+                        logger.warning(f"Failed to extract email info: {e}")
+                        continue
+                
+                # Clear COM cache periodically to prevent memory growth
+                if batch_start % 200 == 0:
+                    clear_com_attribute_cache()
             
             if not email_list:
                 return [], "No valid emails found"
@@ -89,10 +104,12 @@ def unified_search(
             # Sort by received time (newest first)
             email_list.sort(key=lambda x: x.get("received_time", ""), reverse=True)
             
-            # Ensure cache order matches the returned email list
-            clear_email_cache()
-            for email_data in email_list:
-                add_email_to_cache(email_data["entry_id"], email_data)
+            # Use unified cache loading workflow for consistent cache management
+            success = unified_cache_load_workflow(email_list, f"unified_search({search_term})")
+            if success:
+                logger.info(f"Unified cache workflow completed successfully for {len(email_list)} search results")
+            else:
+                logger.warning("Unified cache workflow failed for search results")
             
             message = f"Found {len(email_list)} emails in '{folder_path}'"
             return email_list, message

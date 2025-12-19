@@ -25,7 +25,11 @@ get_emails_from_folder = email_search.get_emails_from_folder
 from .backend.email_data_extractor import get_email_by_number_unified, format_email_with_media
 
 # Cache management
-from .backend.shared import clear_email_cache, add_email_to_cache, save_email_cache
+from .backend.shared import clear_email_cache, add_email_to_cache, save_email_cache, refresh_email_cache_with_new_data
+from .backend.email_search.search_common import unified_cache_load_workflow, extract_email_info_minimal, clear_com_attribute_cache
+
+# Performance optimizations
+from .backend.email_search.parallel_extractor import extract_emails_optimized
 
 # Email composition and operations
 from .backend.email_composition import reply_to_email_by_number, compose_email
@@ -64,6 +68,11 @@ __all__ = [
     'clear_email_cache',
     'add_email_to_cache',
     'save_email_cache',
+    'refresh_email_cache_with_new_data',
+    'unified_cache_load_workflow',
+    'extract_email_info_minimal',
+    'clear_com_attribute_cache',
+    'extract_emails_optimized',
     
     # Batch operations
     'batch_forward_emails',

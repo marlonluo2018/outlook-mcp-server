@@ -371,6 +371,33 @@ def immediate_save_cache():
         logger.warning(f"Failed to immediately save email cache: {e}")
 
 
+def refresh_email_cache_with_new_data():
+    """Improved cache loading workflow:
+    1. Clear both memory and disk cache
+    2. Load fresh data into memory
+    3. Immediately save to disk once data is loaded
+    
+    This ensures cache consistency and prevents stale data issues.
+    """
+    try:
+        # Step 1: Clear both memory and disk cache for fresh start
+        clear_email_cache()
+        
+        # Step 2: Data loading happens externally - this function just prepares the cache
+        # The actual email loading should be done by the caller
+        
+        # Step 3: Once data is loaded, save immediately (done by caller)
+        
+        logger = logging.getLogger(__name__)
+        logger.info("Cache refreshed - ready for fresh data loading")
+        return True
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to refresh email cache: {e}")
+        return False
+
+
 # Load cache when module is imported
 load_email_cache()
 

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Tuple
 from ..outlook_session.session_manager import OutlookSessionManager
 from ..shared import email_cache, email_cache_order, add_email_to_cache, clear_email_cache
 from ..validators import EmailListParams
-from .search_common import extract_email_info, get_folder_path_safe
+from .search_common import extract_email_info, get_folder_path_safe, unified_cache_load_workflow
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> Tuple[List[Dict[str, Any]], str]:
     """Public interface for listing emails (used by CLI).
     Loads emails into cache and returns (emails, message) tuple.
+    
+    Uses improved cache workflow:
+    1. Clear both memory and disk cache
+    2. Load fresh data from Outlook
+    3. Save immediately to disk
     """
     try:
         # Default to 365 days if not specified to ensure we get results
@@ -32,20 +37,19 @@ def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> Tuple[Li
         logger.error(f"Validation error in list_recent_emails: {e}")
         raise ValueError(f"Invalid parameters: {e}")
 
-    # Clear cache before loading new emails to ensure fresh results
-    logger.info(f"Cache before clearing: {len(email_cache)} emails, {len(email_cache_order)} order")
-    clear_email_cache()
-    logger.info(f"Cache after clearing: {len(email_cache)} emails, {len(email_cache_order)} order")
-
+    # Load fresh emails from Outlook
     emails, note = get_emails_from_folder_optimized(folder_name=params.folder_name, days=params.days)
     
     logger.info(f"get_emails_from_folder returned {len(emails)} emails, note: {note}")
 
-    # UVX COMPATIBILITY: Ensure cache is saved immediately after loading emails
-    # Only save to cache if we actually got emails successfully (no error)
+    # Use unified cache loading workflow for consistent cache management
+    # This handles all 3 steps: clear cache, load data, save to disk
     if emails and "Error:" not in note:
-        from ..shared import immediate_save_cache
-        immediate_save_cache()
+        success = unified_cache_load_workflow(emails, f"list_recent_emails({params.folder_name})")
+        if success:
+            logger.info(f"Unified cache workflow completed successfully for {len(emails)} emails")
+        else:
+            logger.warning("Unified cache workflow failed")
 
     days_str = f" from last {params.days} days" if params.days else ""
     
@@ -115,79 +119,98 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
                 date_limit = datetime.now(timezone.utc) - timedelta(days=params.days)
                 logger.info(f"Date filter: items from {date_limit.strftime('%Y-%m-%d')} onwards")
             
-            # OPTIMIZATION 3: Process items in reverse order (newest first) for early termination
-            items_to_process = min(total_items, max_items)
-            logger.info(f"Processing {items_to_process} items in batches of {batch_size}")
-            
-            # OPTIMIZATION 4: Cache folder.Items to avoid repeated COM calls
+            # MAJOR OPTIMIZATION: Use Restrict method to filter by date first, then process
             items_collection = folder.Items
             
-            # Track if we should stop early (when emails are too old)
-            early_termination = False
-            consecutive_old_emails = 0  # OPTIMIZATION: Enhanced early termination counter
-            total_recent_emails = 0  # Track total recent emails found
+            # OPTIMIZATION: Sort items by received time (newest first) at the Outlook level
+            try:
+                items_collection.Sort("[ReceivedTime]", True)  # True = descending order (newest first)
+                logger.info("Applied Outlook-level sorting by ReceivedTime (newest first)")
+            except Exception as e:
+                logger.warning(f"Failed to sort items at Outlook level: {e}")
             
-            for batch_start in range(0, items_to_process, batch_size):
-                if early_termination:
-                    break
+            if date_limit:
+                # Use Restrict to filter items by date - this is MUCH faster than individual item access
+                date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
+                logger.info(f"Applying date filter: {date_filter}")
+                try:
+                    filtered_items = items_collection.Restrict(date_filter)
+                    # Convert to list to get count and enable indexing
+                    filtered_items_list = list(filtered_items)
+                    logger.info(f"Date filter returned {len(filtered_items_list)} items")
                     
-                batch_end = min(batch_start + batch_size, items_to_process)
-                logger.debug(f"Processing batch {batch_start+1} to {batch_end}")
+                    # Since items are already sorted newest first, just take the first N items
+                    items_to_process = min(len(filtered_items_list), max_items)
+                    filtered_items = filtered_items_list[:items_to_process]  # Get first N items (newest)
+                    
+                except Exception as e:
+                    logger.warning(f"Restrict method failed: {e}, falling back to manual filtering")
+                    # Fallback to manual filtering if Restrict fails
+                    filtered_items = []
+                    items_to_process = min(total_items, max_items)
+                    
+                    # Since items are sorted newest first, process from the beginning
+                    for i in range(items_to_process):
+                        try:
+                            item_index = i + 1  # Outlook uses 1-based indexing
+                            if item_index > total_items:
+                                continue
+                                
+                            item = items_collection.Item(item_index)
+                            if not item:
+                                continue
+                            
+                            # Manual date check
+                            if date_limit and hasattr(item, 'ReceivedTime') and item.ReceivedTime:
+                                try:
+                                    item_time = item.ReceivedTime
+                                    if item_time.tzinfo is None:
+                                        item_time = item_time.replace(tzinfo=timezone.utc)
+                                    
+                                    if item_time < date_limit:
+                                        continue
+                                except Exception:
+                                    continue
+                            
+                            # Basic validation
+                            if not hasattr(item, 'Class') or item.Class != 43:
+                                continue
+                            
+                            if not item.ReceivedTime:
+                                continue
+                            
+                            filtered_items.append(item)
+                            
+                        except Exception as e:
+                            logger.debug(f"Error processing item {item_index}: {e}")
+                            continue
+            else:
+                # No date filter - process recent items (already sorted newest first)
+                items_to_process = min(total_items, max_items)
+                filtered_items = []
                 
-                batch_filtered = []
-                
-                for i in range(batch_start, batch_end):
+                for i in range(items_to_process):
                     try:
-                        # OPTIMIZATION 5: Get item in reverse order (newest first)
-                        item_index = total_items - i
-                        if item_index <= 0:
+                        item_index = i + 1  # Outlook uses 1-based indexing
+                        if item_index > total_items:
                             continue
                             
-                        # OPTIMIZATION 6: Single COM access call
                         item = items_collection.Item(item_index)
                         if not item:
                             continue
                         
-                        # OPTIMIZATION 7: Early date check before other validations
-                        if date_limit and hasattr(item, 'ReceivedTime') and item.ReceivedTime:
-                            try:
-                                item_time = item.ReceivedTime
-                                if item_time.tzinfo is None:
-                                    item_time = item_time.replace(tzinfo=timezone.utc)
-                                
-                                # OPTIMIZATION 8: Enhanced early termination if email is too old
-                                # Since we process newest first, we can stop when we find consistently old emails
-                                if item_time < date_limit:
-                                    consecutive_old_emails += 1
-                                    # OPTIMIZATION: Increased threshold from 3 to 10 and require some recent emails first
-                                    if consecutive_old_emails >= 10 and total_recent_emails > 0:  # Only terminate after finding 10 consecutive old emails and some recent emails
-                                        early_termination = True
-                                        logger.info(f"Early termination: Found {consecutive_old_emails} consecutive emails older than {params.days} days after {total_recent_emails} recent emails at position {i}")
-                                        break
-                                    continue
-                                else:
-                                    consecutive_old_emails = 0  # Reset counter when we find a recent email
-                            except Exception:
-                                continue
-                        
-                        # OPTIMIZATION 9: Consolidated validation checks
-                        if not hasattr(item, 'Class') or item.Class != 43:  # 43 = olMail
+                        # Basic validation
+                        if not hasattr(item, 'Class') or item.Class != 43:
                             continue
                         
                         if not item.ReceivedTime:
                             continue
                         
-                        batch_filtered.append(item)
+                        filtered_items.append(item)
                         
                     except Exception as e:
                         logger.debug(f"Error processing item {item_index}: {e}")
                         continue
-                
-                if early_termination:
-                    break
-                    
-                filtered_items.extend(batch_filtered)
-                logger.debug(f"Batch completed: {len(batch_filtered)} items added, total: {len(filtered_items)}")
             
             logger.info(f"Items after date filtering: {len(filtered_items)}")
             
@@ -198,42 +221,27 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
             # Since we process in reverse order, items should already be newest first
             logger.info(f"Processing {len(filtered_items)} emails for caching")
             
-            # OPTIMIZATION 11: Enhanced batch processing with bulk timestamp handling
+            # OPTIMIZATION 11: Enhanced batch processing with bulk timestamp handling - OPTIMIZED
             email_list = []
             cache_count = 0
             
-            # Pre-process timestamps in bulk for better cache performance
-            timestamp_cache = {}
-            for item in filtered_items:
-                try:
-                    received_time = getattr(item, 'ReceivedTime', None)
-                    if received_time:
-                        entry_id = getattr(item, 'EntryID', '')
-                        timestamp_cache[entry_id] = received_time
-                except Exception:
-                    continue
+            # Clear COM cache before processing to prevent memory growth
+            from .search_common import clear_com_attribute_cache
+            clear_com_attribute_cache()
             
-            for item in filtered_items:
-                try:
-                    # OPTIMIZATION 12: Streamlined email extraction with cached timestamps
-                    email_data = extract_email_info(item)
-                    
-                    # Use pre-cached timestamp for better performance
-                    entry_id = email_data.get("entry_id", "")
-                    if entry_id in timestamp_cache:
-                        email_data["received_time"] = str(timestamp_cache[entry_id])
-                    
+            # MAJOR OPTIMIZATION: Use parallel extraction for list operations
+            from .parallel_extractor import extract_emails_optimized
+            
+            logger.info(f"Using parallel extraction for {len(filtered_items)} items")
+            email_list = extract_emails_optimized(filtered_items, use_parallel=True, max_workers=4)
+            
+            # Cache all extracted emails
+            for email_data in email_list:
+                if email_data and email_data.get("entry_id"):
                     add_email_to_cache(email_data["entry_id"], email_data)
-                    email_list.append(email_data)
                     cache_count += 1
-                    
-                    # Log progress for large batches
-                    if cache_count % 100 == 0:
-                        logger.info(f"Cached {cache_count}/{len(filtered_items)} emails")
-                        
-                except Exception as e:
-                    logger.warning(f"Failed to cache email: {e}")
-                    continue
+            
+            logger.info(f"Parallel extraction completed: {len(email_list)} emails, {cache_count} cached")
             
             logger.info(f"Successfully cached {len(email_list)} emails")
             

@@ -31,7 +31,10 @@ from .sender_search import search_email_by_sender as search_email_by_from
 from .recipient_search import search_email_by_recipient as search_email_by_to
 
 # Import shared utilities
-from .search_common import get_folder_path_safe, get_date_limit, is_server_search_supported, extract_email_info
+from .search_common import get_folder_path_safe, get_date_limit, is_server_search_supported, extract_email_info, extract_email_info_minimal, unified_cache_load_workflow, clear_com_attribute_cache
+
+# Import parallel extraction
+from .parallel_extractor import extract_emails_optimized
 
 # Import unified search
 from .unified_search import unified_search
@@ -64,6 +67,10 @@ __all__ = [
     "get_date_limit",
     "is_server_search_supported",
     "extract_email_info",
+    "extract_email_info_minimal",
+    "unified_cache_load_workflow",
+    "clear_com_attribute_cache",
+    "extract_emails_optimized",
     
     # Search implementations
     "unified_search",

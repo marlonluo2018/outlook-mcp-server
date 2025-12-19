@@ -29,7 +29,7 @@ def is_server_search_supported(search_type: str) -> bool:
     return search_type in ["subject", "sender", "recipient"]
 
 
-# COM attribute cache to avoid repeated access
+# COM attribute cache to avoid repeated access - OPTIMIZED VERSION
 _com_attribute_cache = {}
 
 def _get_cached_com_attribute(item, attr_name, default=None):
@@ -46,21 +46,69 @@ def _get_cached_com_attribute(item, attr_name, default=None):
     except Exception:
         return default
 
+def clear_com_attribute_cache():
+    """Clear the COM attribute cache to prevent memory growth."""
+    global _com_attribute_cache
+    _com_attribute_cache.clear()
+    logger.debug("Cleared COM attribute cache")
+
+def extract_email_info_minimal(item) -> Dict[str, Any]:
+    """Extract minimal email information for fast list operations."""
+    try:
+        # Ultra-fast extraction with minimal COM access
+        entry_id = getattr(item, 'EntryID', '')
+        subject = getattr(item, 'Subject', 'No Subject')
+        sender = getattr(item, 'SenderName', 'Unknown')
+        received_time = getattr(item, 'ReceivedTime', None)
+        
+        return {
+            "entry_id": entry_id,
+            "subject": subject,
+            "sender": sender,
+            "received_time": str(received_time) if received_time else "Unknown"
+        }
+    except Exception as e:
+        logger.debug(f"Error in minimal extraction: {e}")
+        return {
+            "entry_id": getattr(item, 'EntryID', ''),
+            "subject": "No Subject",
+            "sender": "Unknown",
+            "received_time": "Unknown"
+        }
+
 def extract_email_info(item) -> Dict[str, Any]:
     """Extract basic email information from an Outlook item with optimized COM access."""
-    # Single-pass COM attribute extraction with caching
-    email_info = {
-        "subject": _get_cached_com_attribute(item, 'Subject', 'No Subject'),
-        "sender": _get_cached_com_attribute(item, 'SenderName', 'Unknown'),
-        "received_time": _get_cached_com_attribute(item, 'ReceivedTime', None),
-        "entry_id": _get_cached_com_attribute(item, 'EntryID', ''),
-    }
-    
-    # Handle None received_time
-    if email_info["received_time"] is None:
-        email_info["received_time"] = "Unknown"
-    else:
-        email_info["received_time"] = str(email_info["received_time"])
+    # OPTIMIZATION: Bulk extract all basic attributes in single COM access
+    try:
+        # Extract all basic attributes at once to minimize COM calls
+        entry_id = getattr(item, 'EntryID', '')
+        subject = getattr(item, 'Subject', 'No Subject')
+        sender = getattr(item, 'SenderName', 'Unknown')
+        received_time = getattr(item, 'ReceivedTime', None)
+        
+        email_info = {
+            "entry_id": entry_id,
+            "subject": subject,
+            "sender": sender,
+            "received_time": str(received_time) if received_time else "Unknown"
+        }
+        
+        # Cache these attributes for recipient processing
+        if entry_id:
+            _com_attribute_cache[f"{entry_id}:EntryID"] = entry_id
+            _com_attribute_cache[f"{entry_id}:Subject"] = subject
+            _com_attribute_cache[f"{entry_id}:SenderName"] = sender
+            _com_attribute_cache[f"{entry_id}:ReceivedTime"] = received_time
+            
+    except Exception as e:
+        logger.debug(f"Error extracting basic email info: {e}")
+        # Fallback to safe defaults
+        email_info = {
+            "entry_id": getattr(item, 'EntryID', ''),
+            "subject": "No Subject",
+            "sender": "Unknown",
+            "received_time": "Unknown"
+        }
     
     # Extract To recipients - optimized with single-pass COM access
     try:
@@ -200,3 +248,59 @@ def extract_email_info(item) -> Dict[str, Any]:
         email_info["attachments"] = []
     
     return email_info
+
+
+def unified_cache_load_workflow(emails_data: List[Dict[str, Any]], operation_name: str = "cache_operation") -> bool:
+    """
+    Unified cache loading workflow for all email tools.
+    
+    Implements the improved 3-step cache workflow:
+    1. Clear both memory and disk cache
+    2. Load fresh data into memory
+    3. Immediately save to disk once data is loaded
+    
+    Args:
+        emails_data: List of email dictionaries to load into cache
+        operation_name: Name of the operation for logging purposes
+        
+    Returns:
+        bool: True if cache loading was successful, False otherwise
+    """
+    try:
+        from ..shared import clear_email_cache, add_email_to_cache, immediate_save_cache
+        
+        logger.info(f"Starting unified cache loading workflow for {operation_name}")
+        
+        # Step 1: Clear both memory and disk cache for fresh start
+        logger.info(f"Step 1: Clearing cache before {operation_name}")
+        clear_email_cache()
+        
+        # Step 2: Load fresh data into memory
+        logger.info(f"Step 2: Loading {len(emails_data)} emails into memory for {operation_name}")
+        emails_loaded = 0
+        
+        for email_data in emails_data:
+            try:
+                entry_id = email_data.get("entry_id")
+                if entry_id:
+                    add_email_to_cache(entry_id, email_data)
+                    emails_loaded += 1
+            except Exception as e:
+                logger.warning(f"Failed to cache email {email_data.get('entry_id', 'unknown')}: {e}")
+                continue
+        
+        logger.info(f"Successfully loaded {emails_loaded} emails into memory for {operation_name}")
+        
+        # Step 3: Save immediately to disk after successful loading
+        if emails_loaded > 0:
+            logger.info(f"Step 3: Saving cache to disk immediately for {operation_name}")
+            immediate_save_cache()
+            logger.info(f"Cache saved to disk successfully for {operation_name}")
+        else:
+            logger.warning(f"No emails were loaded for {operation_name}, skipping disk save")
+        
+        return emails_loaded > 0
+        
+    except Exception as e:
+        logger.error(f"Failed to execute unified cache loading workflow for {operation_name}: {e}")
+        return False

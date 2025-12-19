@@ -303,15 +303,13 @@ class FolderOperations:
             # Limit the number of emails
             limited_items = items[:max_emails]
             
-            # Convert to cache format
+            # Convert to email data format
             email_list = []
             for item in limited_items:
                 try:
                     from ..email_search.search_common import extract_email_info
                     email_data = extract_email_info(item)
                     if email_data:
-                        from ..shared import add_email_to_cache
-                        add_email_to_cache(email_data["entry_id"], email_data)
                         email_list.append(email_data)
                 except Exception as e:
                     logger.warning(f"Failed to process email: {e}")
@@ -319,6 +317,14 @@ class FolderOperations:
             
             if not email_list:
                 return [], f"No valid emails found in '{folder_name}'"
+            
+            # Use unified cache loading workflow for consistent cache management
+            from ..email_search.search_common import unified_cache_load_workflow
+            success = unified_cache_load_workflow(email_list, f"get_folder_emails({folder_name})")
+            if success:
+                logger.info(f"Unified cache workflow completed successfully for {len(email_list)} emails")
+            else:
+                logger.warning("Unified cache workflow failed")
             
             message = f"Found {len(email_list)} emails in '{folder_name}'"
             return email_list, message
