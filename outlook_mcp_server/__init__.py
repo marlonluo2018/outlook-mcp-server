@@ -40,6 +40,9 @@ from .backend.batch_operations import batch_forward_emails
 # Tool registration
 from .tools.registration import register_all_tools
 
+# Main entry point function
+from .__main__ import main
+
 # Version info
 __version__ = "1.0.0"
 __author__ = "Outlook MCP Server Team"
@@ -48,6 +51,9 @@ __author__ = "Outlook MCP Server Team"
 __all__ = [
     # Core functionality
     'OutlookSessionManager',
+    
+    # Main entry point
+    'main',
     
     # Search functions
     'list_folders',
