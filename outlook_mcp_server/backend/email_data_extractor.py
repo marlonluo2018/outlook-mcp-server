@@ -128,6 +128,27 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def extract_basic_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract email data with full text but without embedded images and attachments (renamed from text_only)."""
+    # Start with comprehensive data but filter out attachments and embedded images
+    comprehensive_data = extract_comprehensive_email_data(email)
+    
+    # Remove attachments and embedded images
+    comprehensive_data["attachments"] = []
+    comprehensive_data["has_attachments"] = False
+    
+    # Keep all text content but ensure no embedded images in HTML body
+    if comprehensive_data.get("html_body"):
+        # Simple regex to remove img tags (basic HTML cleaning)
+        import re
+        comprehensive_data["html_body"] = re.sub(r'<img[^>]*>', '', comprehensive_data["html_body"])
+    
+    return comprehensive_data
+
+
+# Removed text_only function and get_conversation_thread function - now basic mode uses the text-only logic
+
+
 def create_basic_email_response(email: Dict[str, Any]) -> Dict[str, Any]:
     """Create basic email response from cached data only."""
     sender = email.get("sender", "Unknown Sender")
@@ -164,9 +185,9 @@ def get_email_by_number_unified(email_number: int, mode: str = "basic", include_
     
     Args:
         email_number: The number of the email in the cache (1-based)
-        mode: Retrieval mode - "basic", "enhanced", "lazy" (compatibility parameter)
-        include_attachments: Whether to include attachment content (compatibility parameter)
-        embed_images: Whether to embed inline images (compatibility parameter)
+        mode: Retrieval mode - "basic", "enhanced", "lazy"
+        include_attachments: Whether to include attachment content
+        embed_images: Whether to embed inline images
         
     Returns:
         Email data dictionary or None if not found
@@ -190,8 +211,11 @@ def get_email_by_number_unified(email_number: int, mode: str = "basic", include_
     if not email_data:
         return None
         
-    # Use comprehensive extraction for all modes (single mode implementation)
-    return extract_comprehensive_email_data(email_data)
+    # Extract email data based on mode
+    if mode == "basic":
+        return extract_basic_email_data(email_data)  # This is the new text-only mode (renamed)
+    else:  # enhanced, lazy, or any other mode
+        return extract_comprehensive_email_data(email_data)
 
 
 def format_email_with_media(email_data: Dict[str, Any]) -> str:
@@ -200,10 +224,20 @@ def format_email_with_media(email_data: Dict[str, Any]) -> str:
     formatted_text += f"From: {email_data.get('from', 'N/A')}\n"
     formatted_text += f"To: {email_data.get('to', 'N/A')}\n"
     formatted_text += f"Date: {email_data.get('received', 'N/A')}\n"
+    
+    # Add conversation topic if available
+    if email_data.get("conversation_topic"):
+        formatted_text += f"Conversation: {email_data.get('conversation_topic', 'N/A')}\n"
+    
     formatted_text += f"Body: {email_data.get('body', 'N/A')}\n"
     
-    if email_data.get("attachments"):
-        formatted_text += f"Attachments: {len(email_data['attachments'])}\n"
+    # Add HTML body if available and different from plain body
+    if email_data.get("html_body") and email_data.get("html_body") != email_data.get("body"):
+        formatted_text += f"HTML Body: {email_data.get('html_body', 'N/A')}\n"
+    
+    # Add attachments if present and mode allows it
+    if email_data.get("attachments") and email_data.get("has_attachments", False):
+        formatted_text += f"\nAttachments: {len(email_data['attachments'])}\n"
         for attachment in email_data["attachments"]:
             formatted_text += f"  - {attachment.get('name', 'Unknown')}"
             if attachment.get('size'):
@@ -212,5 +246,13 @@ def format_email_with_media(email_data: Dict[str, Any]) -> str:
                 content_length = len(attachment['content_base64'])
                 formatted_text += f" [Base64 content: {content_length} characters]"
             formatted_text += "\n"
+    
+    # Add metadata if available
+    if email_data.get("importance") is not None:
+        importance_map = {0: "Low", 1: "Normal", 2: "High"}
+        formatted_text += f"Importance: {importance_map.get(email_data.get('importance'), 'Normal')}\n"
+    
+    if email_data.get("categories"):
+        formatted_text += f"Categories: {email_data.get('categories', 'N/A')}\n"
     
     return formatted_text

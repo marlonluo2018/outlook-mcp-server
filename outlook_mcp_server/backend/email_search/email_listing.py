@@ -32,7 +32,9 @@ def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> Tuple[Li
         effective_days = days or 365
         params = EmailListParams(days=effective_days, folder_name=folder_name)
         
-        logger.info(f"list_recent_emails called with folder={folder_name}, days={days}, effective_days={effective_days}")
+        # Minimal logging for performance
+        if effective_days <= 7:
+            logger.debug(f"list_recent_emails: {folder_name}, {days} days")
     except Exception as e:
         logger.error(f"Validation error in list_recent_emails: {e}")
         raise ValueError(f"Invalid parameters: {e}")
@@ -40,16 +42,10 @@ def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> Tuple[Li
     # Load fresh emails from Outlook
     emails, note = get_emails_from_folder_optimized(folder_name=params.folder_name, days=params.days)
     
-    logger.info(f"get_emails_from_folder returned {len(emails)} emails, note: {note}")
-
     # Use unified cache loading workflow for consistent cache management
     # This handles all 3 steps: clear cache, load data, save to disk
     if emails and "Error:" not in note:
-        success = unified_cache_load_workflow(emails, f"list_recent_emails({params.folder_name})")
-        if success:
-            logger.info(f"Unified cache workflow completed successfully for {len(emails)} emails")
-        else:
-            logger.warning("Unified cache workflow failed")
+        unified_cache_load_workflow(emails, f"list_recent_emails({params.folder_name})")
 
     days_str = f" from last {params.days} days" if params.days else ""
     
@@ -78,11 +74,12 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
             if not folder:
                 return [], f"Error: Folder '{params.folder_name}' not found"
             
-            logger.info(f"Getting emails from folder '{params.folder_name}' for {params.days} days")
+            # Minimal logging for performance - only log significant events
+            if params.days > 7:
+                logger.info(f"Processing {params.folder_name} for {params.days} days")
             
             # Get total item count first (needed for batch size calculation)
             total_items = folder.Items.Count if hasattr(folder.Items, 'Count') else 0
-            logger.info(f"Total items in folder: {total_items}")
             
             # OPTIMIZATION 1: Dynamic batch size based on folder size for optimal performance
             def get_optimal_batch_size(folder_size, days_requested):
@@ -111,13 +108,11 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
                 max_items = 2000  # For longer searches, use higher limit
             
             filtered_items = []
-            logger.info(f"Adjusted max_items limit for {params.days} days: {max_items}")
             
             # Calculate date limit if needed
             date_limit = None
             if params.days:
                 date_limit = datetime.now(timezone.utc) - timedelta(days=params.days)
-                logger.info(f"Date filter: items from {date_limit.strftime('%Y-%m-%d')} onwards")
             
             # MAJOR OPTIMIZATION: Use Restrict method to filter by date first, then process
             items_collection = folder.Items
@@ -125,26 +120,25 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
             # OPTIMIZATION: Sort items by received time (newest first) at the Outlook level
             try:
                 items_collection.Sort("[ReceivedTime]", True)  # True = descending order (newest first)
-                logger.info("Applied Outlook-level sorting by ReceivedTime (newest first)")
             except Exception as e:
-                logger.warning(f"Failed to sort items at Outlook level: {e}")
+                if params.days > 7:  # Only log for longer operations
+                    logger.warning(f"Failed to sort items at Outlook level: {e}")
             
             if date_limit:
                 # Use Restrict to filter items by date - this is MUCH faster than individual item access
                 date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
-                logger.info(f"Applying date filter: {date_filter}")
                 try:
                     filtered_items = items_collection.Restrict(date_filter)
                     # Convert to list to get count and enable indexing
                     filtered_items_list = list(filtered_items)
-                    logger.info(f"Date filter returned {len(filtered_items_list)} items")
                     
                     # Since items are already sorted newest first, just take the first N items
                     items_to_process = min(len(filtered_items_list), max_items)
                     filtered_items = filtered_items_list[:items_to_process]  # Get first N items (newest)
                     
                 except Exception as e:
-                    logger.warning(f"Restrict method failed: {e}, falling back to manual filtering")
+                    if params.days > 7:  # Only log for longer operations
+                        logger.warning(f"Restrict method failed: {e}, falling back to manual filtering")
                     # Fallback to manual filtering if Restrict fails
                     filtered_items = []
                     items_to_process = min(total_items, max_items)
@@ -212,14 +206,12 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
                         logger.debug(f"Error processing item {item_index}: {e}")
                         continue
             
-            logger.info(f"Items after date filtering: {len(filtered_items)}")
-            
-            if not filtered_items:
+            # Minimal logging for performance
+            if len(filtered_items) == 0:
                 return [], f"No emails found in '{params.folder_name}' from last {params.days} days"
             
             # OPTIMIZATION 10: Skip sorting if already in correct order (newest first)
             # Since we process in reverse order, items should already be newest first
-            logger.info(f"Processing {len(filtered_items)} emails for caching")
             
             # OPTIMIZATION 11: Enhanced batch processing with bulk timestamp handling - OPTIMIZED
             email_list = []
@@ -232,7 +224,6 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
             # MAJOR OPTIMIZATION: Use parallel extraction for list operations
             from .parallel_extractor import extract_emails_optimized
             
-            logger.info(f"Using parallel extraction for {len(filtered_items)} items")
             email_list = extract_emails_optimized(filtered_items, use_parallel=True, max_workers=4)
             
             # Cache all extracted emails
@@ -240,10 +231,6 @@ def get_emails_from_folder_optimized(folder_name: str = "Inbox", days: int = 7) 
                 if email_data and email_data.get("entry_id"):
                     add_email_to_cache(email_data["entry_id"], email_data)
                     cache_count += 1
-            
-            logger.info(f"Parallel extraction completed: {len(email_list)} emails, {cache_count} cached")
-            
-            logger.info(f"Successfully cached {len(email_list)} emails")
             
             if not email_list:
                 return [], f"No valid emails found in '{params.folder_name}' from last {params.days} days"

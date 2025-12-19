@@ -2,6 +2,7 @@
 
 from ..backend.email_data_extractor import get_email_by_number_unified, format_email_with_media
 from ..backend.shared import email_cache, email_cache_order, clear_email_cache
+from ..backend.outlook_session import OutlookSessionManager
 
 
 def view_email_cache_tool(page: int = 1) -> dict:
@@ -162,21 +163,22 @@ def view_email_cache_tool(page: int = 1) -> dict:
 
 def get_email_by_number_tool(email_number: int, mode: str = "basic", include_attachments: bool = True, embed_images: bool = True) -> dict:
     """Get email content by cache number with 3 retrieval modes.
-
+    
     Mode Selection Guide:
-    - "basic": Fast metadata + cached body snippet (first ~200 chars) - use for quick scans
+    - "basic": Full text content without embedded images and attachments - use for text-focused viewing
     - "enhanced": Full content + complete thread + HTML + attachments - use for complete analysis  
     - "lazy": Auto-adapts cached vs live data - use when unsure
-
+    
     Email Thread Handling:
-    - "basic": Shows first message only (truncated)
+    - "basic": No conversation threads (focus on individual email content)
     - "enhanced": Shows complete conversation thread
-
+    - "lazy": Auto-adaptive thread handling
+    
     Requires emails to be loaded first via list_recent_emails or search_emails.
-
+    
     Args:
         email_number: Position in cache (1-based)
-        mode: "basic" (fast), "enhanced" (complete), "lazy" (adaptive)
+        mode: "basic" (text-only), "enhanced" (complete), "lazy" (adaptive)
         include_attachments: Include file content (enhanced mode only)
         embed_images: Embed inline images as data URIs (enhanced mode only)
 
@@ -251,7 +253,7 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7) -> dict:
         max_emails = min(days * 50, 1000)  # Rough estimate: 50 emails per day, max 1000
 
         with OutlookSessionManager() as outlook_session:
-            email_list, message = outlook_session.get_folder_emails(folder_path, max_emails)
+            email_list, message = outlook_session.get_folder_emails(folder_path, max_emails, fast_mode=True)
             return {"type": "text", "text": message}
     except Exception as e:
         return {"type": "text", "text": f"Error loading emails from folder: {str(e)}"}

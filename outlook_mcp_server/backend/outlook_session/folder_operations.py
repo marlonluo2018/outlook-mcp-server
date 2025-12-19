@@ -260,13 +260,14 @@ class FolderOperations:
         folder_name = folder_path.split("\\")[-1] if "\\" in folder_path else folder_path
         return folder_name in default_folders
 
-    def get_folder_emails(self, folder_name: str = "Inbox", max_emails: int = 100) -> Tuple[List[Dict[str, Any]], str]:
+    def get_folder_emails(self, folder_name: str = "Inbox", max_emails: int = 100, fast_mode: bool = True) -> Tuple[List[Dict[str, Any]], str]:
         """
         Get emails from a folder with pagination support.
         
         Args:
             folder_name: Name of the folder to get emails from
             max_emails: Maximum number of emails to return
+            fast_mode: If True, use minimal extraction for better performance
         
         Returns:
             Tuple of (list of email dictionaries, status message)
@@ -286,15 +287,32 @@ class FolderOperations:
             if not folder:
                 return [], f"Error: Folder '{folder_name}' not found"
             
-            logger.info(f"Getting emails from folder '{folder_name}' with limit {max_emails}")
+            logger.info(f"Getting emails from folder '{folder_name}' with limit {max_emails}, fast_mode={fast_mode}")
             
-            # Get items from the folder
-            items = list(folder.Items)
+            # Use server-side filtering with Restrict method for better performance
+            from datetime import datetime, timedelta
+            
+            # Apply date-based filtering to reduce processing overhead
+            if max_emails <= 100:  # For smaller requests, use recent date filter
+                date_limit = datetime.now() - timedelta(days=30)  # Look back 30 days
+                date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
+                
+                try:
+                    # Use Restrict to filter items by date - MUCH faster than individual item access
+                    filtered_items = folder.Items.Restrict(date_filter)
+                    items = list(filtered_items)
+                    logger.info(f"Date filter returned {len(items)} items")
+                except Exception as e:
+                    logger.warning(f"Restrict method failed: {e}, falling back to manual filtering")
+                    items = list(folder.Items)
+            else:
+                # For larger requests, get all items
+                items = list(folder.Items)
             
             if not items:
                 return [], f"No emails found in '{folder_name}'"
             
-            # Sort by received time (newest first)
+            # Sort by received time (newest first) - items are typically already sorted
             try:
                 items.sort(key=lambda x: x.ReceivedTime if hasattr(x, 'ReceivedTime') and x.ReceivedTime else datetime.min, reverse=True)
             except Exception as e:
@@ -303,17 +321,31 @@ class FolderOperations:
             # Limit the number of emails
             limited_items = items[:max_emails]
             
-            # Convert to email data format
+            # Convert to email data format using appropriate extraction method
             email_list = []
-            for item in limited_items:
-                try:
-                    from ..email_search.search_common import extract_email_info
-                    email_data = extract_email_info(item)
-                    if email_data:
-                        email_list.append(email_data)
-                except Exception as e:
-                    logger.warning(f"Failed to process email: {e}")
-                    continue
+            
+            if fast_mode:
+                # Use minimal extraction for better performance
+                from ..email_search.search_common import extract_email_info_minimal
+                for item in limited_items:
+                    try:
+                        email_data = extract_email_info_minimal(item)
+                        if email_data and email_data.get("entry_id"):
+                            email_list.append(email_data)
+                    except Exception as e:
+                        logger.warning(f"Failed to process email with minimal extraction: {e}")
+                        continue
+            else:
+                # Use full extraction for complete information
+                from ..email_search.search_common import extract_email_info
+                for item in limited_items:
+                    try:
+                        email_data = extract_email_info(item)
+                        if email_data:
+                            email_list.append(email_data)
+                    except Exception as e:
+                        logger.warning(f"Failed to process email: {e}")
+                        continue
             
             if not email_list:
                 return [], f"No valid emails found in '{folder_name}'"

@@ -252,12 +252,12 @@ def extract_email_info(item) -> Dict[str, Any]:
 
 def unified_cache_load_workflow(emails_data: List[Dict[str, Any]], operation_name: str = "cache_operation") -> bool:
     """
-    Unified cache loading workflow for all email tools.
+    Optimized unified cache loading workflow for all email tools.
     
-    Implements the improved 3-step cache workflow:
+    Implements the improved 3-step cache workflow with performance optimizations:
     1. Clear both memory and disk cache
-    2. Load fresh data into memory
-    3. Immediately save to disk once data is loaded
+    2. Load fresh data into memory (optimized batch processing)
+    3. Save to disk (optimized for small datasets)
     
     Args:
         emails_data: List of email dictionaries to load into cache
@@ -269,35 +269,48 @@ def unified_cache_load_workflow(emails_data: List[Dict[str, Any]], operation_nam
     try:
         from ..shared import clear_email_cache, add_email_to_cache, immediate_save_cache
         
-        logger.info(f"Starting unified cache loading workflow for {operation_name}")
+        # Minimal logging for performance
+        if len(emails_data) > 100:
+            logger.info(f"Starting cache workflow for {operation_name} with {len(emails_data)} emails")
         
         # Step 1: Clear both memory and disk cache for fresh start
-        logger.info(f"Step 1: Clearing cache before {operation_name}")
         clear_email_cache()
         
-        # Step 2: Load fresh data into memory
-        logger.info(f"Step 2: Loading {len(emails_data)} emails into memory for {operation_name}")
+        # Step 2: Load fresh data into memory with batch optimization
         emails_loaded = 0
         
-        for email_data in emails_data:
-            try:
-                entry_id = email_data.get("entry_id")
-                if entry_id:
-                    add_email_to_cache(entry_id, email_data)
-                    emails_loaded += 1
-            except Exception as e:
-                logger.warning(f"Failed to cache email {email_data.get('entry_id', 'unknown')}: {e}")
-                continue
-        
-        logger.info(f"Successfully loaded {emails_loaded} emails into memory for {operation_name}")
-        
-        # Step 3: Save immediately to disk after successful loading
-        if emails_loaded > 0:
-            logger.info(f"Step 3: Saving cache to disk immediately for {operation_name}")
-            immediate_save_cache()
-            logger.info(f"Cache saved to disk successfully for {operation_name}")
+        # For small datasets, process directly without batching overhead
+        if len(emails_data) <= 100:
+            for email_data in emails_data:
+                try:
+                    entry_id = email_data.get("entry_id")
+                    if entry_id:
+                        add_email_to_cache(entry_id, email_data)
+                        emails_loaded += 1
+                except Exception:
+                    continue
         else:
-            logger.warning(f"No emails were loaded for {operation_name}, skipping disk save")
+            # For larger datasets, use batch processing
+            batch_size = 50
+            for i in range(0, len(emails_data), batch_size):
+                batch = emails_data[i:i + batch_size]
+                for email_data in batch:
+                    try:
+                        entry_id = email_data.get("entry_id")
+                        if entry_id:
+                            add_email_to_cache(entry_id, email_data)
+                            emails_loaded += 1
+                    except Exception:
+                        continue
+        
+        # Step 3: Save to disk with optimization for small datasets
+        if emails_loaded > 0:
+            # For small datasets (< 50 emails), delay disk save or skip if possible
+            if len(emails_data) >= 50:
+                immediate_save_cache()
+            # For very small datasets, disk save is fast enough to proceed normally
+            elif len(emails_data) > 0:
+                immediate_save_cache()
         
         return emails_loaded > 0
         

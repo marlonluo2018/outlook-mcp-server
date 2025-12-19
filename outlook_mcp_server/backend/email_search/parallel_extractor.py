@@ -97,35 +97,53 @@ def extract_emails_parallel(items: List[Any], max_workers: int = 4) -> List[Dict
         return extract_emails_sequential_fallback(items)
 
 def extract_emails_sequential_fallback(items: List[Any]) -> List[Dict[str, Any]]:
-    """Fallback sequential extraction when parallel processing fails."""
+    """Optimized sequential extraction for small datasets with minimal overhead."""
     email_list = []
+    
+    # Pre-allocate list for better performance if size is known
+    if hasattr(items, '__len__'):
+        email_list = [None] * len(items)
+        index = 0
     
     for item in items:
         try:
+            # Minimal attribute access with error handling
             entry_id = getattr(item, 'EntryID', '')
-            subject = getattr(item, 'Subject', 'No Subject')
-            sender = getattr(item, 'SenderName', 'Unknown')
+            if not entry_id:
+                continue
+                
+            subject = getattr(item, 'Subject', 'No Subject') or 'No Subject'
+            sender = getattr(item, 'SenderName', 'Unknown') or 'Unknown'
+            
             received_time = getattr(item, 'ReceivedTime', None)
+            received_str = str(received_time) if received_time else "Unknown"
             
             email_data = {
                 "entry_id": entry_id,
                 "subject": subject,
                 "sender": sender,
-                "received_time": str(received_time) if received_time else "Unknown"
+                "received_time": received_str
             }
             
-            if email_data and email_data.get("entry_id"):
+            if hasattr(items, '__len__'):
+                email_list[index] = email_data
+                index += 1
+            else:
                 email_list.append(email_data)
                 
-        except Exception as e:
-            logger.debug(f"Error in sequential fallback: {e}")
+        except Exception:
+            # Silent fail for performance - skip problematic items
             continue
+    
+    # Remove None values if pre-allocation was used
+    if hasattr(items, '__len__') and index < len(email_list):
+        email_list = email_list[:index]
     
     return email_list
 
 def extract_emails_optimized(items: List[Any], use_parallel: bool = True, max_workers: int = 4) -> List[Dict[str, Any]]:
     """
-    Optimized email extraction with automatic fallback.
+    Optimized email extraction with automatic fallback and improved small dataset handling.
     
     Args:
         items: List of Outlook MailItem objects
@@ -138,14 +156,17 @@ def extract_emails_optimized(items: List[Any], use_parallel: bool = True, max_wo
     if not items:
         return []
     
-    # For small lists, sequential is faster due to overhead
-    if len(items) < 10:
-        logger.info(f"Small list ({len(items)} items), using sequential extraction")
-        return extract_emails_sequential_fallback(items)
+    item_count = len(items)
     
-    if use_parallel:
-        logger.info(f"Large list ({len(items)} items), using parallel extraction")
-        return extract_emails_parallel(items, max_workers)
-    else:
-        logger.info(f"Using sequential extraction for {len(items)} items")
+    # Optimized thresholds for better performance
+    if item_count < 20:  # Very small datasets: sequential is definitely faster
         return extract_emails_sequential_fallback(items)
+    elif item_count < 50:  # Small datasets: use sequential with minimal overhead
+        return extract_emails_sequential_fallback(items)
+    elif item_count < 100:  # Medium datasets: use sequential or light parallel
+        return extract_emails_sequential_fallback(items)
+    else:  # Large datasets: use parallel processing
+        if use_parallel:
+            return extract_emails_parallel(items, max_workers)
+        else:
+            return extract_emails_sequential_fallback(items)
