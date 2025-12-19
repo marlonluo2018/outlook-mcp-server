@@ -72,7 +72,13 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
         raise ValueError("Body must be a non-empty string")
     
     try:
-        result = compose_email(recipient_email, subject, body, cc_email)
+        # Parse semicolon-separated email addresses into lists
+        to_recipients = [email.strip() for email in recipient_email.split(';') if email.strip()]
+        cc_recipients = None
+        if cc_email:
+            cc_recipients = [email.strip() for email in cc_email.split(';') if email.strip()]
+        
+        result = compose_email(to_recipients, subject, body, cc_recipients)
         return {"type": "text", "text": result}
     except Exception as e:
         return {"type": "text", "text": f"Error composing email: {str(e)}"}
