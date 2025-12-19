@@ -22,6 +22,7 @@ from . import (
     view_email_cache_tool,
     get_email_by_number_tool,
     load_emails_by_folder_tool,
+    clear_email_cache_tool,
     
     # Email operations
     reply_to_email_by_number_tool,
@@ -57,6 +58,7 @@ def register_all_tools(mcp_server: FastMCP) -> None:
     mcp_server.tool(view_email_cache_tool)
     mcp_server.tool(get_email_by_number_tool)
     mcp_server.tool(load_emails_by_folder_tool)
+    mcp_server.tool(clear_email_cache_tool)
     
     # Email operations
     mcp_server.tool(reply_to_email_by_number_tool)

@@ -27,6 +27,7 @@ from .viewing_tools import (
     view_email_cache_tool,
     get_email_by_number_tool,
     load_emails_by_folder_tool,
+    clear_email_cache_tool,
 )
 
 from .email_operations import (
@@ -56,6 +57,7 @@ __all__ = [
     'view_email_cache_tool',
     'get_email_by_number_tool',
     'load_emails_by_folder_tool',
+    'clear_email_cache_tool',
     
     # Email operations
     'reply_to_email_by_number_tool',

@@ -1,7 +1,7 @@
 """Email viewing tools for Outlook MCP Server."""
 
 from ..backend.email_data_extractor import get_email_by_number_unified, format_email_with_media
-from ..backend.shared import email_cache, email_cache_order
+from ..backend.shared import email_cache, email_cache_order, clear_email_cache
 
 
 def view_email_cache_tool(page: int = 1) -> dict:
@@ -246,9 +246,42 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7) -> dict:
     try:
         # Use a reasonable max_emails limit based on days (approximate)
         max_emails = min(days * 50, 1000)  # Rough estimate: 50 emails per day, max 1000
-        
+
         with OutlookSessionManager() as outlook_session:
             email_list, message = outlook_session.get_folder_emails(folder_path, max_emails)
             return {"type": "text", "text": message}
     except Exception as e:
         return {"type": "text", "text": f"Error loading emails from folder: {str(e)}"}
+
+
+def clear_email_cache_tool() -> dict:
+    """Clear the email cache both in memory and on disk.
+
+    This tool removes all cached emails from memory and deletes the persistent
+    cache file from disk. Use this when you want to free up memory or ensure
+    fresh data is loaded from Outlook.
+
+    Returns:
+        dict: Response containing confirmation message
+        {
+            "type": "text",
+            "text": "Email cache cleared successfully"
+        }
+    """
+    try:
+        # Get current cache size for confirmation
+        cache_size = len(email_cache_order)
+        
+        # Clear the cache
+        clear_email_cache()
+        
+        return {
+            "type": "text", 
+            "text": f"Email cache cleared successfully. Removed {cache_size} cached emails."
+        }
+        
+    except Exception as e:
+        return {
+            "type": "text", 
+            "text": f"Error clearing email cache: {str(e)}"
+        }
