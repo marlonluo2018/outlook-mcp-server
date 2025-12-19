@@ -161,27 +161,30 @@ def view_email_cache_tool(page: int = 1) -> dict:
 
 
 def get_email_by_number_tool(email_number: int, mode: str = "basic", include_attachments: bool = True, embed_images: bool = True) -> dict:
-    """Get email content by its cache number with configurable retrieval modes.
+    """Get email content by cache number with 3 retrieval modes.
 
-    This unified tool replaces the previous basic and enhanced email retrieval tools
-    with a single interface that supports different retrieval modes:
-    - "basic": Fast, lightweight retrieval for email listings and summaries
-    - "enhanced": Full media support with attachments, inline images, and comprehensive metadata
-    - "lazy": Intelligent mode that adapts based on cached data for optimal performance
+    Mode Selection Guide:
+    - "basic": Fast metadata + cached body snippet (first ~200 chars) - use for quick scans
+    - "enhanced": Full content + complete thread + HTML + attachments - use for complete analysis  
+    - "lazy": Auto-adapts cached vs live data - use when unsure
+
+    Email Thread Handling:
+    - "basic": Shows first message only (truncated)
+    - "enhanced": Shows complete conversation thread
 
     Requires emails to be loaded first via list_recent_emails or search_emails.
 
     Args:
-        email_number: The number of the email in the cache (1-based)
-        mode: Retrieval mode - "basic" (default), "enhanced" (with media), "lazy" (performance optimized)
-        include_attachments: Whether to include attachment content (enhanced mode only, default: True)
-        embed_images: Whether to embed inline images in HTML body (enhanced mode only, default: True)
+        email_number: Position in cache (1-based)
+        mode: "basic" (fast), "enhanced" (complete), "lazy" (adaptive)
+        include_attachments: Include file content (enhanced mode only)
+        embed_images: Embed inline images as data URIs (enhanced mode only)
 
     Returns:
         dict: Response containing email details based on requested mode
         {
-            "type": "text",
-            "text": "Email details here"
+            "type": "text", 
+            "text": "Formatted email content"
         }
 
     Raises:
