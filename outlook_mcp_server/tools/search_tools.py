@@ -51,11 +51,7 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
         emails, message = list_recent_emails(folder_name=folder_name, days=days)
         logger.info(f"list_recent_emails returned: {len(emails)} emails, message: {message}")
         
-        # Add debugging info
-        from ..backend.shared import email_cache
-        debug_info = f"\n\nDEBUG: Cache contains {len(email_cache)} emails"
-        
-        return {"type": "text", "text": message + debug_info}
+        return {"type": "text", "text": message + ". Use 'view_email_cache_tool' to view them."}
     except Exception as e:
         logger.error(f"Error in list_recent_emails_tool: {e}")
         import traceback
