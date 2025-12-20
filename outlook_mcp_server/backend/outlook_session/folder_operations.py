@@ -382,12 +382,12 @@ class FolderOperations:
                             # Instead of converting entire collection to list, iterate efficiently
                             temp_items = []
                             count = 0
-                            # Use GetFirst/GetNext for better performance with large collections
-                            item = filtered_items.GetFirst()
+                            # Use GetLast/GetPrevious for newest-first order (better performance)
+                            item = filtered_items.GetLast()
                             while item and count < max_emails * 2:  # Get 2x to account for filtering
                                 temp_items.append(item)
                                 count += 1
-                                item = filtered_items.GetNext()
+                                item = filtered_items.GetPrevious()
                             
                             items = temp_items
                             logger.info(f"{days}-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
