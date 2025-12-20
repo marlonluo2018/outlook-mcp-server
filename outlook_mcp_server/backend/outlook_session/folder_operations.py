@@ -7,6 +7,8 @@ This module provides folder-related operations such as creation, deletion, movin
 import logging
 from typing import Optional, Any, Dict, List, Tuple
 from datetime import datetime
+import time
+from functools import lru_cache
 
 from ..utils import retry_on_com_error, OutlookFolderType
 from .exceptions import FolderNotFoundError, OperationFailedError, InvalidParameterError
@@ -20,9 +22,51 @@ class FolderOperations:
     def __init__(self, session_manager):
         """Initialize with a session manager instance."""
         self.session_manager = session_manager
+        self._folder_cache = {}
+        self._cache_timestamp = 0
+        self._cache_ttl = 300  # 5 minutes TTL for folder cache
+
+    def _is_cache_valid(self):
+        """Check if folder cache is still valid."""
+        return time.time() - self._cache_timestamp < self._cache_ttl
+
+    def _get_cached_folder(self, folder_name: str):
+        """Get folder from cache if available and valid."""
+        if self._is_cache_valid() and folder_name in self._folder_cache:
+            logger.debug(f"Folder cache hit for: {folder_name}")
+            return self._folder_cache[folder_name]
+        return None
+
+    def _cache_folder(self, folder_name: str, folder):
+        """Cache folder for future use."""
+        self._folder_cache[folder_name] = folder
+        self._cache_timestamp = time.time()
+        logger.debug(f"Folder cached: {folder_name}")
+
+    def clear_folder_cache(self):
+        """Clear the folder cache."""
+        self._folder_cache.clear()
+        self._cache_timestamp = 0
+        logger.info("Folder cache cleared")
 
     def get_folder(self, folder_name: Optional[str] = None):
-        """Get specified folder or default inbox."""
+        """Get specified folder or default inbox with caching."""
+        # Normalize folder name for caching
+        cache_key = folder_name.lower() if folder_name else "inbox"
+        
+        # Try cache first
+        cached_folder = self._get_cached_folder(cache_key)
+        if cached_folder:
+            return cached_folder
+        
+        # Get folder and cache it
+        folder = self._get_folder_internal(folder_name)
+        if folder:
+            self._cache_folder(cache_key, folder)
+        return folder
+
+    def _get_folder_internal(self, folder_name: Optional[str] = None):
+        """Internal method to get folder without caching."""
         # Handle string "null" as well as actual None
         if not folder_name or folder_name == "null" or folder_name.lower() == "inbox":
             folder = self.session_manager.outlook_namespace.GetDefaultFolder(OutlookFolderType.INBOX)
@@ -90,26 +134,44 @@ class FolderOperations:
 
                     remaining_parts = path_parts[1:]
 
-                # Navigate through the remaining path parts
+                # Navigate through the remaining path parts - optimized search
                 for part in remaining_parts:
                     found = False
-                    for subfolder in current_folder.Folders:
-                        if subfolder.Name == part:
-                            current_folder = subfolder
-                            found = True
-                            break
+                    # Try direct access first (much faster for well-known folders)
+                    try:
+                        current_folder = current_folder.Folders[part]
+                        found = True
+                    except Exception:
+                        # Fall back to iteration if direct access fails
+                        for subfolder in current_folder.Folders:
+                            if subfolder.Name == part:
+                                current_folder = subfolder
+                                found = True
+                                break
                     if not found:
                         raise FolderNotFoundError(f"Folder '{part}' not found in '{current_folder.Name}'")
 
                 return current_folder
             else:
-                # Original logic for single folder names
+                # Original logic for single folder names - optimized
+                # Try direct access first for common folders
+                try:
+                    return self.session_manager.outlook_namespace.Folders[folder_name]
+                except Exception:
+                    pass
+                
+                # Fall back to iteration
                 for folder in self.session_manager.outlook_namespace.Folders:
                     if folder.Name == folder_name:
                         return folder
-                    for subfolder in folder.Folders:
-                        if subfolder.Name == folder_name:
-                            return subfolder
+                    # Try direct access for subfolders
+                    try:
+                        return folder.Folders[folder_name]
+                    except Exception:
+                        # Fall back to iteration for subfolders
+                        for subfolder in folder.Folders:
+                            if subfolder.Name == folder_name:
+                                return subfolder
                 raise FolderNotFoundError(f"Folder '{folder_name}' not found")
         except Exception as e:
             logger.error(f"Error finding folder: {str(e)}")
@@ -260,18 +322,21 @@ class FolderOperations:
         folder_name = folder_path.split("\\")[-1] if "\\" in folder_path else folder_path
         return folder_name in default_folders
 
-    def get_folder_emails(self, folder_name: str = "Inbox", max_emails: int = 100, fast_mode: bool = True) -> Tuple[List[Dict[str, Any]], str]:
+    def get_folder_emails(self, folder_name: str = "Inbox", max_emails: int = 100, fast_mode: bool = True, days_filter: int = None) -> Tuple[List[Dict[str, Any]], str]:
         """
-        Get emails from a folder with pagination support.
+        Get emails from a folder with pagination support - optimized for performance.
         
         Args:
             folder_name: Name of the folder to get emails from
             max_emails: Maximum number of emails to return
             fast_mode: If True, use minimal extraction for better performance
+            days_filter: Number of days to filter by (None for number-based loading)
         
         Returns:
             Tuple of (list of email dictionaries, status message)
         """
+        start_time = time.time()
+        
         try:
             # Validate input parameters
             if not folder_name or not folder_name.strip():
@@ -283,6 +348,7 @@ class FolderOperations:
             return [], f"Error: Invalid parameters: {e}"
 
         try:
+            # Get folder with caching
             folder = self.get_folder(folder_name)
             if not folder:
                 return [], f"Error: Folder '{folder_name}' not found"
@@ -292,73 +358,179 @@ class FolderOperations:
             # Use server-side filtering with Restrict method for better performance
             from datetime import datetime, timedelta
             
-            # Apply date-based filtering to reduce processing overhead
-            if max_emails <= 100:  # For smaller requests, use recent date filter
-                date_limit = datetime.now() - timedelta(days=30)  # Look back 30 days
-                date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
-                
+            # Determine optimal filtering strategy based on parameters
+            items = []
+            filter_time = time.time()
+            
+            if days_filter is None:
+                # Number-based loading: get items without date filtering
+                logger.info(f"Number-based loading: getting up to {max_emails * 2} items without date filter")
                 try:
-                    # Use Restrict to filter items by date - MUCH faster than individual item access
-                    filtered_items = folder.Items.Restrict(date_filter)
-                    items = list(filtered_items)
-                    logger.info(f"Date filter returned {len(items)} items")
+                    # Use GetFirst/GetNext pattern for number-based loading
+                    item = folder.Items.GetFirst()
+                    count = 0
+                    while item and count < max_emails * 2:  # Get 2x to account for filtering
+                        items.append(item)
+                        item = folder.Items.GetNext()
+                        count += 1
+                    logger.info(f"Retrieved {len(items)} items in {time.time() - filter_time:.2f}s")
                 except Exception as e:
-                    logger.warning(f"Restrict method failed: {e}, falling back to manual filtering")
-                    items = list(folder.Items)
+                    logger.warning(f"GetFirst approach failed: {e}, falling back to list conversion")
+                    # Final fallback - try to get at least some items
+                    try:
+                        items = list(folder.Items)[:max_emails * 2]
+                        logger.info(f"Fallback: retrieved {len(items)} items in {time.time() - filter_time:.2f}s")
+                    except Exception as final_e:
+                        logger.error(f"All fallback methods failed: {final_e}")
+                        items = []
             else:
-                # For larger requests, get all items
-                items = list(folder.Items)
+                # Time-based loading: use date filtering (existing logic)
+                # For small requests (≤50), use very recent filter for speed
+                if max_emails <= 50:
+                    date_limit = datetime.now() - timedelta(days=7)  # Only 7 days for small requests
+                    date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
+                    
+                    try:
+                        filtered_items = folder.Items.Restrict(date_filter)
+                        if filtered_items.Count > 0:
+                            items = list(filtered_items)
+                            logger.info(f"7-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
+                            # If we got enough items, use them
+                            if len(items) >= max_emails:
+                                pass  # We have enough
+                            else:
+                                # Not enough recent items, fall back to larger filter
+                                logger.info(f"7-day filter only returned {len(items)} items, expanding to 30 days")
+                                date_limit = datetime.now() - timedelta(days=30)
+                                date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
+                                filtered_items = folder.Items.Restrict(date_filter)
+                                items = list(filtered_items)
+                                logger.info(f"30-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
+                        else:
+                            items = []
+                    except Exception as e:
+                        logger.warning(f"Restrict method failed: {e}, using GetFirst approach")
+                        # Use GetFirst/GetNext pattern instead of converting entire collection
+                        items = []
+                        try:
+                            item = folder.Items.GetFirst()
+                            count = 0
+                            while item and count < max_emails * 2:  # Get 2x to account for filtering
+                                items.append(item)
+                                item = folder.Items.GetNext()
+                                count += 1
+                        except Exception as inner_e:
+                            logger.error(f"GetFirst approach also failed: {inner_e}")
+                            # Final fallback - try to get at least some items
+                            try:
+                                items = list(folder.Items)[:max_emails * 2]
+                            except Exception as final_e:
+                                logger.error(f"All fallback methods failed: {final_e}")
+                                items = []
+                else:
+                    # For larger requests, use 30-day filter first
+                    date_limit = datetime.now() - timedelta(days=30)
+                    date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
+                    
+                    try:
+                        filtered_items = folder.Items.Restrict(date_filter)
+                        if filtered_items.Count > 0:
+                            items = list(filtered_items)
+                            logger.info(f"30-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
+                        else:
+                            items = []
+                    except Exception as e:
+                        logger.warning(f"Restrict method failed: {e}, falling back to GetFirst approach")
+                        # Use GetFirst/GetNext pattern for large requests
+                        items = []
+                        try:
+                            item = folder.Items.GetFirst()
+                            count = 0
+                            while item and count < max_emails * 2:
+                                items.append(item)
+                                item = folder.Items.GetNext()
+                                count += 1
+                        except Exception as inner_e:
+                            logger.error(f"GetFirst approach also failed: {inner_e}")
+                            # Final fallback
+                            try:
+                                items = list(folder.Items)[:max_emails * 2]
+                            except Exception as final_e:
+                                logger.error(f"All fallback methods failed: {final_e}")
+                                items = []
             
             if not items:
                 return [], f"No emails found in '{folder_name}'"
             
-            # Sort by received time (newest first) - items are typically already sorted
+            # Quick sort by received time (newest first) - only sort what we need
+            sort_time = time.time()
             try:
+                # Only sort the items we actually need, not the entire collection
                 items.sort(key=lambda x: x.ReceivedTime if hasattr(x, 'ReceivedTime') and x.ReceivedTime else datetime.min, reverse=True)
+                logger.info(f"Sorting completed in {time.time() - sort_time:.2f}s")
             except Exception as e:
                 logger.warning(f"Error sorting emails: {e}")
             
             # Limit the number of emails
             limited_items = items[:max_emails]
             
-            # Convert to email data format using appropriate extraction method
+            # Batch process emails for better performance
+            extraction_time = time.time()
             email_list = []
             
+            # Import extraction functions once, outside the loop
             if fast_mode:
-                # Use minimal extraction for better performance
                 from ..email_search.search_common import extract_email_info_minimal
-                for item in limited_items:
-                    try:
-                        email_data = extract_email_info_minimal(item)
-                        if email_data and email_data.get("entry_id"):
-                            email_list.append(email_data)
-                    except Exception as e:
-                        logger.warning(f"Failed to process email with minimal extraction: {e}")
-                        continue
+                extractor = extract_email_info_minimal
             else:
-                # Use full extraction for complete information
                 from ..email_search.search_common import extract_email_info
-                for item in limited_items:
+                extractor = extract_email_info
+            
+            # Process in batches with progress indication
+            batch_size = 50 if fast_mode else 25  # Smaller batches for full extraction
+            total_items = len(limited_items)
+            
+            for i in range(0, total_items, batch_size):
+                batch = limited_items[i:i + batch_size]
+                batch_start = time.time()
+                
+                for item in batch:
                     try:
-                        email_data = extract_email_info(item)
-                        if email_data:
+                        email_data = extractor(item)
+                        if email_data and (fast_mode and email_data.get("entry_id") or not fast_mode):
                             email_list.append(email_data)
                     except Exception as e:
                         logger.warning(f"Failed to process email: {e}")
                         continue
+                
+                # Log progress for large batches
+                if total_items > 100 and (i + batch_size) % 100 == 0:
+                    progress = (i + batch_size) / total_items * 100
+                    logger.info(f"Progress: {progress:.1f}% ({i + batch_size}/{total_items} items processed)")
+            
+            logger.info(f"Email extraction completed in {time.time() - extraction_time:.2f}s")
             
             if not email_list:
                 return [], f"No valid emails found in '{folder_name}'"
             
             # Use unified cache loading workflow for consistent cache management
+            cache_time = time.time()
             from ..email_search.search_common import unified_cache_load_workflow
             success = unified_cache_load_workflow(email_list, f"get_folder_emails({folder_name})")
+            
             if success:
-                logger.info(f"Unified cache workflow completed successfully for {len(email_list)} emails")
+                logger.info(f"Unified cache workflow completed in {time.time() - cache_time:.2f}s")
             else:
                 logger.warning("Unified cache workflow failed")
             
-            message = f"Found {len(email_list)} emails in '{folder_name}'"
+            total_time = time.time() - start_time
+            message = f"Found {len(email_list)} emails in '{folder_name}' (completed in {total_time:.2f}s)"
+            
+            # Log performance metrics
+            logger.info(f"Performance: Folder='{folder_name}', Emails={len(email_list)}, TotalTime={total_time:.2f}s, "
+                       f"FilterTime={filter_time - start_time:.2f}s, SortTime={sort_time - filter_time:.2f}s, "
+                       f"ExtractTime={extraction_time - sort_time:.2f}s, CacheTime={cache_time - extraction_time:.2f}s")
+            
             return email_list, message
             
         except Exception as e:
@@ -447,12 +619,13 @@ def move_folder(source_folder_path: str, target_parent_path: str) -> str:
         return f"Error: {str(e)}"
 
 
-def get_folder_emails(folder_name: str = "Inbox", max_emails: int = 100) -> Tuple[List[Dict[str, Any]], str]:
+def get_folder_emails(folder_name: str = "Inbox", max_emails: int = 100, days_filter: int = None) -> Tuple[List[Dict[str, Any]], str]:
     """Get emails from a folder with pagination support.
     
     Args:
         folder_name: Name of the folder to get emails from
         max_emails: Maximum number of emails to return
+        days_filter: Number of days to filter by (None for number-based loading)
         
     Returns:
         Tuple of (list of email dictionaries, status message)
@@ -462,7 +635,7 @@ def get_folder_emails(folder_name: str = "Inbox", max_emails: int = 100) -> Tupl
     try:
         with OutlookSessionManager() as session_manager:
             folder_ops = FolderOperations(session_manager)
-            return folder_ops.get_folder_emails(folder_name, max_emails)
+            return folder_ops.get_folder_emails(folder_name, max_emails, True, days_filter)
     except Exception as e:
         logger.error(f"Error getting folder emails: {str(e)}")
         return [], f"Error: {str(e)}"

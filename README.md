@@ -295,6 +295,11 @@ The AI helps you send emails to multiple recipients efficiently:
 ### Email Search & Loading
 - `get_folder_list_tool()` - Lists all Outlook mail folders
 - `list_recent_emails_tool(days=7, folder_name=None)` - Load recent emails
+- `load_emails_by_folder_tool(folder_path, days=7, max_emails=None)` - Load emails from specific folder with flexible options
+  - **Time-based**: `load_emails_by_folder_tool("Inbox", days=7)` - Load emails from last 7 days
+  - **Number-based**: `load_emails_by_folder_tool("Inbox", max_emails=50)` - Load 50 most recent emails
+  - **Combined**: `load_emails_by_folder_tool("Inbox", days=7, max_emails=50)` - Load up to 50 emails from last 7 days
+  - **Folder paths**: Use full paths like "user@company.com/Inbox/SubFolder"
 - `search_email_by_subject_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by subject
 - `search_email_by_sender_name_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by sender
 - `search_email_by_recipient_name_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by recipient

@@ -121,8 +121,8 @@ class OutlookSessionManager:
             raise ConnectionError("Folder operations not initialized. Ensure Outlook is connected.")
         return self._folder_operations.get_folder(folder_name)
 
-    def get_folder_emails(self, folder_name: str = "Inbox", max_emails: int = 100, fast_mode: bool = True):
+    def get_folder_emails(self, folder_name: str = "Inbox", max_emails: int = 100, fast_mode: bool = True, days_filter: int = None):
         """Get emails from a folder using folder operations."""
         if not self._folder_operations:
             raise ConnectionError("Folder operations not initialized. Ensure Outlook is connected.")
-        return self._folder_operations.get_folder_emails(folder_name, max_emails, fast_mode)
+        return self._folder_operations.get_folder_emails(folder_name, max_emails, fast_mode, days_filter)

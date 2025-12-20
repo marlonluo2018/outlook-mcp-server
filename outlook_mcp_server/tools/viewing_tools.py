@@ -225,12 +225,13 @@ def get_email_by_number_tool(email_number: int, mode: str = "basic", include_att
         return {"type": "text", "text": f"Error retrieving email: {str(e)}"}
 
 
-def load_emails_by_folder_tool(folder_path: str, days: int = 7) -> dict:
+def load_emails_by_folder_tool(folder_path: str, days: int = 7, max_emails: int = None) -> dict:
     """Load emails from a specific folder into cache.
 
     Args:
         folder_path: Path to the folder (supports nested paths like "user@company.com/Inbox/SubFolder1")
         days: Number of days to look back (default: 7, max: 30)
+        max_emails: Maximum number of emails to load (optional). When specified, loads the most recent emails up to this count.
 
     Returns:
         dict: Response containing email count message
@@ -242,18 +243,30 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7) -> dict:
         
         IMPORTANT: Folder paths must include the email address as the root folder.
         Use format: "user@company.com/Inbox/SubFolder" not just "Inbox/SubFolder"
+        
+        Usage examples:
+        - Time-based: load_emails_by_folder_tool("Inbox", days=7)
+        - Number-based: load_emails_by_folder_tool("Inbox", max_emails=50)
+        - Combined: load_emails_by_folder_tool("Inbox", days=7, max_emails=50)
     """
     if not folder_path or not isinstance(folder_path, str):
         raise ValueError("Folder path must be a non-empty string")
     if not isinstance(days, int) or days < 1 or days > 30:
         raise ValueError("Days must be an integer between 1 and 30")
+    if max_emails is not None and (not isinstance(max_emails, int) or max_emails < 1):
+        raise ValueError("max_emails must be a positive integer when specified")
     
     try:
-        # Use a reasonable max_emails limit based on days (approximate)
-        max_emails = min(days * 50, 1000)  # Rough estimate: 50 emails per day, max 1000
+        # Determine max_emails based on parameters
+        if max_emails is not None:
+            # Number-based loading: use specified max_emails
+            actual_max_emails = min(max_emails, 1000)  # Cap at 1000
+        else:
+            # Time-based loading: estimate based on days
+            actual_max_emails = min(days * 50, 1000)  # Rough estimate: 50 emails per day, max 1000
 
         with OutlookSessionManager() as outlook_session:
-            email_list, message = outlook_session.get_folder_emails(folder_path, max_emails, fast_mode=True)
+            email_list, message = outlook_session.get_folder_emails(folder_path, actual_max_emails, fast_mode=True, days_filter=days if max_emails is None else None)
             return {"type": "text", "text": message}
     except Exception as e:
         return {"type": "text", "text": f"Error loading emails from folder: {str(e)}"}

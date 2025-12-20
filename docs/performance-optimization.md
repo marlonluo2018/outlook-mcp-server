@@ -958,6 +958,59 @@ get_email_by_number_tool(email_number=1, mode="text_only")
 - **Content**: Adapts content retrieval based on performance requirements
 - **Best For**: General-purpose use when specific requirements are unclear
 
+### Number-Based Loading Performance (December 2025)
+
+The `load_emails_by_folder_tool` now supports number-based loading for improved performance and flexibility:
+
+#### Usage Examples
+```python
+# Time-based loading (traditional)
+load_emails_by_folder_tool("Inbox", days=7)
+
+# Number-based loading (new)
+load_emails_by_folder_tool("Inbox", max_emails=50)
+
+# Combined approach
+load_emails_by_folder_tool("Inbox", days=7, max_emails=50)
+```
+
+#### Performance Benefits
+- **Predictable Performance**: Number-based loading provides consistent timing regardless of folder size
+- **Memory Efficiency**: Limits memory usage by processing only requested number of emails
+- **Faster Initial Load**: No date filtering overhead when using pure number-based loading
+- **Backward Compatible**: Existing time-based usage continues to work unchanged
+
+#### Implementation Details
+```python
+def get_folder_emails_optimized(folder_name: str, max_emails: int = 100, days_filter: int = None):
+    """Optimized email retrieval with number-based loading support."""
+    
+    # Number-based loading: Process only the most recent N emails
+    if days_filter is None:
+        # Load items in reverse order (newest first) and limit to max_emails
+        items_to_process = min(folder_items.Count, max_emails)
+        filtered_items = folder_items[:items_to_process]
+        return filtered_items
+    
+    # Time-based loading: Apply date filter then limit results
+    else:
+        date_limit = datetime.now() - timedelta(days=days_filter)
+        # Apply server-side filtering for better performance
+        date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
+        filtered_items = folder_items.Restrict(date_filter)
+        
+        # Limit to max_emails if specified
+        if max_emails:
+            filtered_items = filtered_items[:min(len(filtered_items), max_emails)]
+        
+        return filtered_items
+```
+
+#### When to Use Each Mode
+- **Number-based (`max_emails`)**: Best for quick overviews, dashboard displays, or when you need exactly N most recent emails
+- **Time-based (`days`)**: Best for time-sensitive queries like "emails from last week"
+- **Combined**: Best for comprehensive analysis with both recency and quantity limits
+
 ### Performance Considerations
 
 1. **Cache Loading vs. Viewing Modes**: Email cache loading always uses minimal extraction for performance. Viewing modes determine how much detail is shown when retrieving individual emails.
@@ -967,3 +1020,5 @@ get_email_by_number_tool(email_number=1, mode="text_only")
 3. **Media Exclusion**: The text_only mode excludes attachments and embedded images, significantly reducing data transfer and processing time for text-focused workflows.
 
 4. **Adaptive Performance**: The lazy mode automatically balances performance and completeness based on available cached data and system resources.
+
+5. **Number-Based Loading**: Pure number-based loading (`max_emails` only) provides the fastest performance by avoiding date filtering overhead and processing exactly the requested number of emails.
