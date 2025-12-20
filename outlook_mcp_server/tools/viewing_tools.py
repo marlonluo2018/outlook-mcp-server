@@ -267,7 +267,7 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7, max_emails: int 
 
         with OutlookSessionManager() as outlook_session:
             email_list, message = outlook_session.get_folder_emails(folder_path, actual_max_emails, fast_mode=True, days_filter=days if max_emails is None else None)
-            return {"type": "text", "text": message}
+            return {"type": "text", "text": message + ". Use 'view_email_cache_tool' to view them."}
     except Exception as e:
         return {"type": "text", "text": f"Error loading emails from folder: {str(e)}"}
 
