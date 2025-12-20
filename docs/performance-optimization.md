@@ -196,14 +196,14 @@ def get_folder_emails_optimized(folder, max_emails=50, days_filter=None):
             try:
                 filtered_items = folder.Items.Restrict(date_filter)
                 if filtered_items.Count > 0:
-                    # Use efficient GetFirst/GetNext iteration instead of list conversion
+                    # Use efficient GetLast/GetPrevious iteration for newest-first order
                     temp_items = []
                     count = 0
-                    item = filtered_items.GetFirst()
+                    item = filtered_items.GetLast()
                     while item and count < max_emails * 2:
                         temp_items.append(item)
                         count += 1
-                        item = filtered_items.GetNext()
+                        item = filtered_items.GetPrevious()
                     
                     items = temp_items
                     logger.info(f"{days}-day filter returned {len(items)} items")
@@ -287,10 +287,11 @@ def process_folder_emails_memory_efficient(folder_items, max_emails=50):
 
 **Performance Benefits:**
 - **Progressive filtering** starts with 7 days and expands gradually, avoiding large initial data loads
-- **Efficient iteration** using GetFirst/GetNext instead of expensive list conversions
+- **Efficient iteration** using GetLast/GetPrevious for newest-first order instead of expensive list conversions
 - **Memory efficiency** processes items one at a time rather than loading entire collections
 - **Scalable performance** handles enterprise folders with 100,000+ emails efficiently
 - **Fast response times** 50 emails in 1.11s, 100 emails in 2.13s (previously "very slow")
+- **Email ordering fix**: Changed from GetFirst/GetNext to GetLast/GetPrevious for correct newest-first retrieval
 
 **Key Improvements:**
 - Reduced memory allocation by 80% through iterative processing

@@ -88,20 +88,20 @@ def get_folder_emails_with_progressive_filtering(folder, max_emails=50):
     return items
 ```
 
-#### Efficient COM Object Iteration
+#### Efficient COM Object Iteration with Email Ordering
 ```python
 def iterate_outlook_items_efficiently(items_collection, max_count):
-    """Efficiently iterate through Outlook items using GetFirst/GetNext pattern."""
+    """Efficiently iterate through Outlook items using GetLast/GetPrevious for newest-first order."""
     
     result_items = []
     count = 0
     
-    # Use GetFirst/GetNext for better performance with large collections
-    item = items_collection.GetFirst()
+    # Use GetLast/GetPrevious for better performance and correct ordering
+    item = items_collection.GetLast()
     while item and count < max_count:
         result_items.append(item)
         count += 1
-        item = items_collection.GetNext()
+        item = items_collection.GetPrevious()
     
     return result_items
 
@@ -120,6 +120,13 @@ def iterate_items_reverse_order(folder_items, max_count):
     
     return result_items
 ```
+
+**Email Ordering Optimization:**
+The implementation now uses `GetLast()/GetPrevious()` iteration instead of `GetFirst()/GetNext()` to ensure emails are retrieved in newest-first order. This change:
+- Guarantees correct chronological ordering (newest emails first)
+- Eliminates the need for post-retrieval sorting
+- Maintains all performance optimizations
+- Works consistently across all retrieval methods
 
 **Performance Benefits:**
 - **Progressive filtering** avoids loading large datasets initially
