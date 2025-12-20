@@ -363,26 +363,67 @@ class FolderOperations:
             filter_time = time.time()
             
             if days_filter is None:
-                # Number-based loading: get items without date filtering
-                logger.info(f"Number-based loading: getting up to {max_emails * 2} items without date filter")
-                try:
-                    # Use GetFirst/GetNext pattern for number-based loading
-                    item = folder.Items.GetFirst()
-                    count = 0
-                    while item and count < max_emails * 2:  # Get 2x to account for filtering
-                        items.append(item)
-                        item = folder.Items.GetNext()
-                        count += 1
-                    logger.info(f"Retrieved {len(items)} items in {time.time() - filter_time:.2f}s")
-                except Exception as e:
-                    logger.warning(f"GetFirst approach failed: {e}, falling back to list conversion")
-                    # Final fallback - try to get at least some items
+                # Number-based loading: get items without date filtering, but ensure we get newest first
+                logger.info(f"Number-based loading: getting up to {max_emails} items without date filter")
+                
+                # Use a much smaller date range initially for better performance
+                # Start with 7 days, then expand gradually if needed
+                days_to_try = [7, 14, 30, 60, 90]
+                items = []
+                
+                for days in days_to_try:
+                    date_limit = datetime.now() - timedelta(days=days)
+                    date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
+                    
                     try:
-                        items = list(folder.Items)[:max_emails * 2]
-                        logger.info(f"Fallback: retrieved {len(items)} items in {time.time() - filter_time:.2f}s")
+                        filtered_items = folder.Items.Restrict(date_filter)
+                        if filtered_items.Count > 0:
+                            # Use a more efficient approach - get only what we need
+                            # Instead of converting entire collection to list, iterate efficiently
+                            temp_items = []
+                            count = 0
+                            # Use GetFirst/GetNext for better performance with large collections
+                            item = filtered_items.GetFirst()
+                            while item and count < max_emails * 2:  # Get 2x to account for filtering
+                                temp_items.append(item)
+                                count += 1
+                                item = filtered_items.GetNext()
+                            
+                            items = temp_items
+                            logger.info(f"{days}-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
+                            
+                            # If we got enough items, break out of the loop
+                            if len(items) >= max_emails:
+                                break
+                        else:
+                            continue  # Try next larger time window
+                    except Exception as e:
+                        logger.warning(f"Restrict method failed for {days} days: {e}")
+                        continue
+                
+                # If no items found with date filtering, try reverse indexing as fallback
+                if not items:
+                    logger.info("No items found with date filtering, trying reverse indexing fallback")
+                    try:
+                        # Get items in reverse order (newest first) using a more efficient approach
+                        total_count = folder.Items.Count
+                        if total_count > 0:
+                            # Start from the end (newest items) and work backwards efficiently
+                            # Use GetLast/GetPrevious for better performance
+                            items = []
+                            item = folder.Items.GetLast()
+                            count = 0
+                            while item and count < max_emails * 2:  # Get 2x to be safe
+                                items.append(item)
+                                count += 1
+                                item = folder.Items.GetPrevious()
+                            logger.info(f"Retrieved {len(items)} items using GetLast/GetPrevious in {time.time() - filter_time:.2f}s")
+                        else:
+                            items = []
                     except Exception as final_e:
                         logger.error(f"All fallback methods failed: {final_e}")
                         items = []
+            
             else:
                 # Time-based loading: use date filtering (existing logic)
                 # For small requests (≤50), use very recent filter for speed
@@ -393,7 +434,14 @@ class FolderOperations:
                     try:
                         filtered_items = folder.Items.Restrict(date_filter)
                         if filtered_items.Count > 0:
-                            items = list(filtered_items)
+                            # Use efficient iteration instead of list conversion
+                            items = []
+                            count = 0
+                            item = filtered_items.GetFirst()
+                            while item and count < max_emails * 2:
+                                items.append(item)
+                                count += 1
+                                item = filtered_items.GetNext()
                             logger.info(f"7-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
                             # If we got enough items, use them
                             if len(items) >= max_emails:
@@ -404,26 +452,36 @@ class FolderOperations:
                                 date_limit = datetime.now() - timedelta(days=30)
                                 date_filter = f"@SQL=urn:schemas:httpmail:datereceived >= '{date_limit.strftime('%Y-%m-%d')}'"
                                 filtered_items = folder.Items.Restrict(date_filter)
-                                items = list(filtered_items)
+                                # Use efficient iteration
+                                items = []
+                                count = 0
+                                item = filtered_items.GetFirst()
+                                while item and count < max_emails * 2:
+                                    items.append(item)
+                                    count += 1
+                                    item = filtered_items.GetNext()
                                 logger.info(f"30-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
                         else:
                             items = []
                     except Exception as e:
-                        logger.warning(f"Restrict method failed: {e}, using GetFirst approach")
-                        # Use GetFirst/GetNext pattern instead of converting entire collection
+                        logger.warning(f"Restrict method failed: {e}, using sorted list approach")
+                        # Use sorted list approach to get newest emails first
                         items = []
                         try:
-                            item = folder.Items.GetFirst()
-                            count = 0
-                            while item and count < max_emails * 2:  # Get 2x to account for filtering
-                                items.append(item)
-                                item = folder.Items.GetNext()
-                                count += 1
+                            all_items = list(folder.Items)
+                            # Sort by received time (newest first) before limiting
+                            all_items.sort(key=lambda x: x.ReceivedTime if hasattr(x, 'ReceivedTime') and x.ReceivedTime else datetime.min, reverse=True)
+                            items = all_items[:max_emails * 2]  # Get 2x to account for filtering
                         except Exception as inner_e:
-                            logger.error(f"GetFirst approach also failed: {inner_e}")
-                            # Final fallback - try to get at least some items
+                            logger.error(f"Sorted list approach failed: {inner_e}")
+                            # Final fallback - try GetFirst/GetNext
                             try:
-                                items = list(folder.Items)[:max_emails * 2]
+                                item = folder.Items.GetFirst()
+                                count = 0
+                                while item and count < max_emails * 2:
+                                    items.append(item)
+                                    item = folder.Items.GetNext()
+                                    count += 1
                             except Exception as final_e:
                                 logger.error(f"All fallback methods failed: {final_e}")
                                 items = []
@@ -435,26 +493,36 @@ class FolderOperations:
                     try:
                         filtered_items = folder.Items.Restrict(date_filter)
                         if filtered_items.Count > 0:
-                            items = list(filtered_items)
+                            # Use efficient iteration instead of list conversion
+                            items = []
+                            count = 0
+                            item = filtered_items.GetFirst()
+                            while item and count < max_emails * 2:
+                                items.append(item)
+                                count += 1
+                                item = filtered_items.GetNext()
                             logger.info(f"30-day filter returned {len(items)} items in {time.time() - filter_time:.2f}s")
                         else:
                             items = []
                     except Exception as e:
-                        logger.warning(f"Restrict method failed: {e}, falling back to GetFirst approach")
-                        # Use GetFirst/GetNext pattern for large requests
+                        logger.warning(f"Restrict method failed: {e}, falling back to sorted list approach")
+                        # Use sorted list approach to get newest emails first
                         items = []
                         try:
-                            item = folder.Items.GetFirst()
-                            count = 0
-                            while item and count < max_emails * 2:
-                                items.append(item)
-                                item = folder.Items.GetNext()
-                                count += 1
+                            all_items = list(folder.Items)
+                            # Sort by received time (newest first) before limiting
+                            all_items.sort(key=lambda x: x.ReceivedTime if hasattr(x, 'ReceivedTime') and x.ReceivedTime else datetime.min, reverse=True)
+                            items = all_items[:max_emails * 2]  # Get 2x to account for filtering
                         except Exception as inner_e:
-                            logger.error(f"GetFirst approach also failed: {inner_e}")
-                            # Final fallback
+                            logger.error(f"Sorted list approach failed: {inner_e}")
+                            # Final fallback - try GetFirst/GetNext
                             try:
-                                items = list(folder.Items)[:max_emails * 2]
+                                item = folder.Items.GetFirst()
+                                count = 0
+                                while item and count < max_emails * 2:
+                                    items.append(item)
+                                    item = folder.Items.GetNext()
+                                    count += 1
                             except Exception as final_e:
                                 logger.error(f"All fallback methods failed: {final_e}")
                                 items = []

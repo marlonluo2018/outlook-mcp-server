@@ -263,7 +263,11 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7, max_emails: int 
             actual_max_emails = min(max_emails, 1000)  # Cap at 1000
         else:
             # Time-based loading: estimate based on days
-            actual_max_emails = min(days * 50, 1000)  # Rough estimate: 50 emails per day, max 1000
+            # If days is default (7) and no max_emails specified, use reasonable defaults
+            if days == 7:
+                actual_max_emails = 100  # Reasonable default for 7 days
+            else:
+                actual_max_emails = min(days * 50, 1000)  # Rough estimate: 50 emails per day, max 1000
 
         with OutlookSessionManager() as outlook_session:
             email_list, message = outlook_session.get_folder_emails(folder_path, actual_max_emails, fast_mode=True, days_filter=days if max_emails is None else None)
