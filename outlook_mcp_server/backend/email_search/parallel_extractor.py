@@ -41,6 +41,7 @@ def _extract_email_info_parallel(item_data: Dict[str, Any]) -> Dict[str, Any]:
         # Extract attachment info
         has_attachments = item_data.get('has_attachments', False)
         attachments = item_data.get('attachments', [])
+        embedded_images_count = item_data.get('embedded_images_count', 0)
         
         return {
             "entry_id": entry_id,
@@ -51,6 +52,8 @@ def _extract_email_info_parallel(item_data: Dict[str, Any]) -> Dict[str, Any]:
             "cc_recipients": cc_recipients,
             "has_attachments": has_attachments,
             "attachments": attachments,
+            "attachments_count": len(attachments),
+            "embedded_images_count": embedded_images_count,
             "unread": item_data.get('UnRead', False)
         }
     except Exception as e:
@@ -64,6 +67,7 @@ def _extract_email_info_parallel(item_data: Dict[str, Any]) -> Dict[str, Any]:
             "cc_recipients": [],
             "has_attachments": False,
             "attachments": [],
+            "attachments_count": 0,
             "unread": False
         }
 
@@ -98,24 +102,68 @@ def extract_emails_parallel(items: List[Any], max_workers: int = 4) -> List[Dict
                     'UnRead': getattr(item, 'UnRead', False)
                 }
                 
-                # Extract attachment info
+                # Extract attachment info with embedded image detection
                 try:
                     attachments = getattr(item, 'Attachments', None)
                     if attachments:
-                        item_dict['has_attachments'] = attachments.Count > 0
-                        item_dict['attachments'] = [
-                            {
-                                'filename': getattr(att, 'FileName', 'Unknown'),
-                                'size': getattr(att, 'Size', 0)
-                            }
-                            for att in attachments
-                        ]
+                        attachments_list = []
+                        embedded_images_count = 0
+                        
+                        for att in attachments:
+                            try:
+                                file_name = getattr(att, 'FileName', '') or getattr(att, 'DisplayName', 'Unknown')
+                                is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico'))
+                                
+                                # Check if it's an embedded image using multiple methods
+                                is_embedded = False
+                                
+                                # Method 1: Check Content-ID property
+                                try:
+                                    content_id = getattr(att, 'PropertyAccessor', None)
+                                    if content_id:
+                                        cid = content_id.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
+                                        if cid and cid.strip():
+                                            is_embedded = True
+                                except Exception:
+                                    pass
+                                
+                                # Method 2: Check if filename contains CID-like patterns
+                                if not is_embedded and is_image:
+                                    if 'cid:' in file_name.lower() or file_name.startswith('image'):
+                                        is_embedded = True
+                                
+                                # Method 3: Check attachment type
+                                try:
+                                    att_type = getattr(att, 'Type', 1)
+                                    if att_type == 6:  # Embedded message
+                                        is_embedded = True
+                                except Exception:
+                                    pass
+                                
+                                # Count embedded images
+                                if is_embedded and is_image:
+                                    embedded_images_count += 1
+                                else:
+                                    # Only add non-embedded attachments to the list
+                                    attachments_list.append({
+                                        'filename': file_name,
+                                        'size': getattr(att, 'Size', 0)
+                                    })
+                                
+                            except Exception:
+                                continue
+                        
+                        item_dict['has_attachments'] = len(attachments_list) > 0
+                        item_dict['attachments'] = attachments_list
+                        item_dict['embedded_images_count'] = embedded_images_count
                     else:
                         item_dict['has_attachments'] = False
                         item_dict['attachments'] = []
+                        item_dict['embedded_images_count'] = 0
                 except Exception:
                     item_dict['has_attachments'] = False
                     item_dict['attachments'] = []
+                    item_dict['embedded_images_count'] = 0
                 
                 item_dicts.append(item_dict)
             except Exception as e:
@@ -194,23 +242,65 @@ def extract_emails_sequential_fallback(items: List[Any]) -> List[Dict[str, Any]]
                 except Exception:
                     cc_recipients = []
             
-            # Extract attachment info
+            # Extract attachment info with embedded image detection
             has_attachments = False
             attachments = []
+            embedded_images_count = 0
             try:
                 attachments_obj = getattr(item, 'Attachments', None)
                 if attachments_obj:
                     has_attachments = attachments_obj.Count > 0
-                    attachments = [
-                        {
-                            'filename': getattr(att, 'FileName', 'Unknown'),
-                            'size': getattr(att, 'Size', 0)
-                        }
-                        for att in attachments_obj
-                    ]
+                    attachments_list = []
+                    
+                    for att in attachments_obj:
+                        try:
+                            file_name = getattr(att, 'FileName', '') or getattr(att, 'DisplayName', 'Unknown')
+                            is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico'))
+                            
+                            # Check if it's an embedded image using multiple methods
+                            is_embedded = False
+                            
+                            # Method 1: Check Content-ID property
+                            try:
+                                content_id = getattr(att, 'PropertyAccessor', None)
+                                if content_id:
+                                    cid = content_id.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
+                                    if cid and cid.strip():
+                                        is_embedded = True
+                            except Exception:
+                                pass
+                            
+                            # Method 2: Check if filename contains CID-like patterns
+                            if not is_embedded and is_image:
+                                if 'cid:' in file_name.lower() or file_name.startswith('image'):
+                                    is_embedded = True
+                            
+                            # Method 3: Check attachment type
+                            try:
+                                att_type = getattr(att, 'Type', 1)
+                                if att_type == 6:  # Embedded message
+                                    is_embedded = True
+                            except Exception:
+                                pass
+                            
+                            # Count embedded images
+                            if is_embedded and is_image:
+                                embedded_images_count += 1
+                            else:
+                                # Only add non-embedded attachments to the list
+                                attachments_list.append({
+                                    'filename': file_name,
+                                    'size': getattr(att, 'Size', 0)
+                                })
+                            
+                        except Exception:
+                            continue
+                    
+                    attachments = attachments_list
             except Exception:
                 has_attachments = False
                 attachments = []
+                embedded_images_count = 0
             
             # Extract unread status
             unread = getattr(item, 'UnRead', False)
@@ -224,6 +314,8 @@ def extract_emails_sequential_fallback(items: List[Any]) -> List[Dict[str, Any]]
                 "cc_recipients": cc_recipients,
                 "has_attachments": has_attachments,
                 "attachments": attachments,
+                "attachments_count": len(attachments),
+                "embedded_images_count": embedded_images_count,
                 "unread": unread
             }
             

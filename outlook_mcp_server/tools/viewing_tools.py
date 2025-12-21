@@ -29,7 +29,7 @@ def view_email_cache_tool(page: int = 1) -> dict:
                         "cc": "CC Recipient",
                         "received": "2023-12-21 10:30:00",
                         "status": "Read",
-                        "attachments": "Yes",
+                        "attachments_count": 2,
                         "embedded_images_count": 2
                     }
                 ]
@@ -100,62 +100,85 @@ def view_email_cache_tool(page: int = 1) -> dict:
                 
                 # Check attachments and embedded images
                 has_attachments = email_data.get("has_attachments", False)
-                attachments_display = "Yes" if has_attachments else "No"
+                attachments_count = len(email_data.get("attachments", []))
                 
-                # Count embedded images (if available in the email)
-                embedded_images_count = 0
-                real_attachments_count = len(email_data.get("attachments", []))
+                # Use cached embedded_images_count if available, otherwise count manually
+                embedded_images_count = email_data.get("embedded_images_count", 0)
                 
-                try:
-                    # Try to get entry_id to check for embedded images
-                    entry_id = email_data.get("id", email_data.get("entry_id", ""))
-                    if entry_id:
-                        from ..backend.outlook_session.session_manager import OutlookSessionManager
-                        with OutlookSessionManager() as session:
-                            if session and session.namespace and hasattr(session.namespace, 'GetItemFromID'):
-                                try:
-                                    item = session.namespace.GetItemFromID(entry_id)
-                                    if hasattr(item, 'Attachments') and item.Attachments:
-                                        for attachment in item.Attachments:
-                                            file_name = getattr(attachment, 'FileName', getattr(attachment, 'DisplayName', 'Unknown'))
-                                            is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))
-                                            is_pdf = file_name.lower().endswith('.pdf')
-                                            
-                                            # Check if it's an embedded image
-                                            is_embedded = False
-                                            try:
-                                                if hasattr(attachment, 'PropertyAccessor'):
-                                                    content_id = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
-                                                    is_embedded = content_id is not None and len(str(content_id)) > 0
-                                            except:
-                                                pass
-                                            
-                                            # Additional check for image files with common embedded naming pattern
-                                            if not is_embedded and is_image and file_name.lower().startswith('image'):
-                                                is_embedded = True
-                                            
-                                            # PDF files are always considered real attachments, not embedded
-                                            if is_pdf:
+                # Only re-analyze if we don't have embedded_images_count in cache
+                if embedded_images_count == 0 and not email_data.get("attachments_processed", False):
+                    try:
+                        # Try to get entry_id to check for embedded images
+                        entry_id = email_data.get("id", email_data.get("entry_id", ""))
+                        if entry_id:
+                            from ..backend.outlook_session.session_manager import OutlookSessionManager
+                            with OutlookSessionManager() as session:
+                                if session and session.namespace and hasattr(session.namespace, 'GetItemFromID'):
+                                    try:
+                                        item = session.namespace.GetItemFromID(entry_id)
+                                        if hasattr(item, 'Attachments') and item.Attachments:
+                                            for attachment in item.Attachments:
+                                                # Check if it's an embedded image using 4-method detection
                                                 is_embedded = False
-                                            
-                                            # Count embedded images that are not already in the attachments list
-                                            if is_embedded:
-                                                # Check if this embedded image is not already counted as a real attachment
-                                                is_real_attachment = False
-                                                for real_attachment in email_data.get("attachments", []):
-                                                    if real_attachment.get("name", "") == file_name:
-                                                        is_real_attachment = True
-                                                        break
                                                 
-                                                if not is_real_attachment:
-                                                    embedded_images_count += 1
-                                except:
-                                    pass
-                except:
-                    pass
-                
-                # Create attachments info string
-                attachments_info = attachments_display
+                                                # Method 1: Check Content-ID and Content-Location properties
+                                                try:
+                                                    if hasattr(attachment, 'PropertyAccessor'):
+                                                        content_id = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
+                                                        is_embedded = content_id is not None and len(str(content_id).strip()) > 0
+                                                        
+                                                        if not is_embedded:
+                                                            content_location = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3713001F")
+                                                            is_embedded = content_location is not None and len(str(content_location).strip()) > 0
+                                                except:
+                                                    pass
+                                                
+                                                # Method 2: Check attachment type
+                                                attachment_type = getattr(attachment, 'Type', 1)
+                                                if attachment_type in [3, 4]:  # 3 = Embedded, 4 = OLE
+                                                    is_embedded = True
+                                                
+                                                # Method 3: Check for embedded image naming patterns
+                                                file_name = getattr(attachment, 'FileName', '') or getattr(attachment, 'DisplayName', 'Unknown')
+                                                is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico'))
+                                                if is_image and not is_embedded:
+                                                    lower_name = file_name.lower()
+                                                    if any(pattern in lower_name for pattern in ['image', 'img', 'cid:', 'embedded']):
+                                                        is_embedded = True
+                                                    elif '.' in lower_name:
+                                                        name_without_ext = lower_name.rsplit('.', 1)[0]
+                                                        if name_without_ext.isdigit() or (len(name_without_ext) <= 2 and name_without_ext.isalnum()):
+                                                            is_embedded = True
+                                                
+                                                # Method 4: Check attachment size
+                                                if is_image and not is_embedded:
+                                                    try:
+                                                        attachment_size = getattr(attachment, 'Size', 0)
+                                                        if attachment_size > 0 and attachment_size < 10000:  # Less than 10KB
+                                                            is_embedded = True
+                                                    except:
+                                                        pass
+                                                
+                                                # Document files are always real attachments
+                                                is_document = file_name.lower().endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar'))
+                                                if is_document:
+                                                    is_embedded = False
+                                                
+                                                # Count embedded images that are not already in the attachments list
+                                                if is_embedded:
+                                                    # Check if this embedded image is not already counted as a real attachment
+                                                    is_real_attachment = False
+                                                    for real_attachment in email_data.get("attachments", []):
+                                                        if real_attachment.get("name", "") == file_name:
+                                                            is_real_attachment = True
+                                                            break
+                                                    
+                                                    if not is_real_attachment:
+                                                        embedded_images_count += 1
+                                    except:
+                                        pass
+                    except:
+                        pass
                 
                 # Store embedded images count directly
                 page_emails.append({
@@ -166,7 +189,7 @@ def view_email_cache_tool(page: int = 1) -> dict:
                     "cc": cc_display,
                     "received": email_data.get("received_time", "Unknown"),
                     "status": status,
-                    "attachments": attachments_info,
+                    "attachments_count": attachments_count,
                     "embedded_images_count": embedded_images_count
                 })
         
@@ -255,13 +278,17 @@ def get_email_by_number_tool(email_number: int, mode: str = "basic", include_att
         return {"type": "text", "text": f"Error retrieving email: {str(e)}"}
 
 
-def load_emails_by_folder_tool(folder_path: str, days: int = 7, max_emails: int = None) -> dict:
+def load_emails_by_folder_tool(folder_path: str, days: int = None, max_emails: int = None) -> dict:
     """Load emails from a specific folder into cache.
+
+    **LLM Note**: This function enforces strict mutual exclusion between 'days' and 'max_emails' parameters.
+    You CANNOT use both parameters together. Choose either time-based loading (days) or number-based loading (max_emails).
+    Attempting to use both parameters will raise a ValueError.
 
     Args:
         folder_path: Path to the folder (supports nested paths like "user@company.com/Inbox/SubFolder1")
-        days: Number of days to look back (default: 7, max: 30)
-        max_emails: Maximum number of emails to load (optional). When specified, loads the most recent emails up to this count.
+        days: Number of days to look back (max: 30) - mutually exclusive with max_emails
+        max_emails: Maximum number of emails to load (mutually exclusive with days) - when specified, loads the most recent emails up to this count
 
     Returns:
         dict: Response containing email count message
@@ -277,12 +304,24 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7, max_emails: int 
         Usage examples:
         - Time-based: load_emails_by_folder_tool("Inbox", days=7)
         - Number-based: load_emails_by_folder_tool("Inbox", max_emails=50)
-        - Combined: load_emails_by_folder_tool("Inbox", days=7, max_emails=50)
+        - Cannot use both: load_emails_by_folder_tool("Inbox", days=7, max_emails=50) - this will raise an error
     """
     if not folder_path or not isinstance(folder_path, str):
         raise ValueError("Folder path must be a non-empty string")
-    if not isinstance(days, int) or days < 1 or days > 30:
-        raise ValueError("Days must be an integer between 1 and 30")
+    
+    # Enforce mutual exclusion: cannot use both days and max_emails together
+    if days is not None and max_emails is not None:
+        raise ValueError("Cannot specify both 'days' and 'max_emails' parameters. Use either time-based (days) or number-based (max_emails) loading, not both.")
+    
+    # Set default behavior if neither parameter is specified
+    if days is None and max_emails is None:
+        days = 7  # Default to 7 days if neither parameter is specified
+    
+    # Validate parameters
+    if days is not None:
+        if not isinstance(days, int) or days < 1 or days > 30:
+            raise ValueError("Days must be an integer between 1 and 30")
+    
     if max_emails is not None and (not isinstance(max_emails, int) or max_emails < 1):
         raise ValueError("max_emails must be a positive integer when specified")
     
@@ -292,12 +331,9 @@ def load_emails_by_folder_tool(folder_path: str, days: int = 7, max_emails: int 
             # Number-based loading: use specified max_emails
             actual_max_emails = min(max_emails, 1000)  # Cap at 1000
         else:
-            # Time-based loading: estimate based on days
-            # If days is default (7) and no max_emails specified, use reasonable defaults
-            if days == 7:
-                actual_max_emails = 100  # Reasonable default for 7 days
-            else:
-                actual_max_emails = min(days * 50, 1000)  # Rough estimate: 50 emails per day, max 1000
+            # Time-based loading: use a very high limit to get all emails in the date range
+            # This ensures we respect the days parameter strictly without expanding the date range
+            actual_max_emails = 10000  # High limit to capture all emails in the specified date range
 
         with OutlookSessionManager() as outlook_session:
             email_list, message = outlook_session.get_folder_emails(folder_path, actual_max_emails, fast_mode=True, days_filter=days if max_emails is None else None)

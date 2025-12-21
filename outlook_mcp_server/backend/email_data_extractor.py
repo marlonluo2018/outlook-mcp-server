@@ -44,6 +44,7 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "body": email.get("body", ""),  # Include cached body if available
         "attachments": email.get("attachments", []),  # Include cached attachments if available
+        "attachments_count": len(email.get("attachments", [])),  # Count of real attachments
     }
     
     # Always attempt to get comprehensive content from Outlook
@@ -77,22 +78,56 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
                         
                         # Check if it's an embedded image
                         is_embedded = False
+                        
+                        # Method 1: Check Content-ID property (most reliable for embedded images)
                         try:
                             if hasattr(attachment, 'PropertyAccessor'):
                                 content_id = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
-                                is_embedded = content_id is not None and len(str(content_id)) > 0
+                                is_embedded = content_id is not None and len(str(content_id).strip()) > 0
+                                
+                                # Also check for Content-Location property (another indicator of embedded content)
+                                if not is_embedded:
+                                    try:
+                                        content_location = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3713001F")
+                                        is_embedded = content_location is not None and len(str(content_location).strip()) > 0
+                                    except:
+                                        pass
                         except:
                             pass
                         
-                        # Additional check for image files with common embedded naming pattern
-                        if not is_embedded:
-                            is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))
-                            if is_image and file_name.lower().startswith('image'):
-                                is_embedded = True
+                        # Method 2: Check attachment type - embedded attachments are usually Type 4 (OLE) or Type 3 (Embedded)
+                        attachment_type = getattr(attachment, 'Type', 1)
+                        if attachment_type in [3, 4]:  # 3 = Embedded, 4 = OLE
+                            is_embedded = True
                         
-                        # PDF files are always considered real attachments
-                        is_pdf = file_name.lower().endswith('.pdf')
-                        if is_pdf:
+                        # Method 3: Check if it's an image with suspicious naming patterns
+                        is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico'))
+                        if is_image and not is_embedded:
+                            # Check for common embedded image naming patterns
+                            lower_name = file_name.lower()
+                            if any(pattern in lower_name for pattern in ['image', 'img', 'cid:', 'embedded']):
+                                is_embedded = True
+                            # Check if filename is just numbers with extension (common for embedded images)
+                            elif '.' in lower_name:
+                                name_without_ext = lower_name.rsplit('.', 1)[0]
+                                if name_without_ext.isdigit() or (len(name_without_ext) <= 2 and name_without_ext.isalnum()):
+                                    is_embedded = True
+                        
+                        # Method 4: Check if attachment size is suspiciously small for an image (embedded images are often smaller)
+                        if is_image and not is_embedded:
+                            try:
+                                attachment_size = getattr(attachment, 'Size', 0)
+                                # Embedded images are typically smaller than regular image attachments
+                                if attachment_size > 0 and attachment_size < 50000:  # Less than 50KB
+                                    # Additional check: if it's a very small image, more likely to be embedded
+                                    if attachment_size < 10000:  # Less than 10KB
+                                        is_embedded = True
+                            except:
+                                pass
+                        
+                        # PDF files and other documents are always considered real attachments
+                        is_document = file_name.lower().endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar'))
+                        if is_document:
                             is_embedded = False
                         
                         # Only add non-embedded attachments to the list
@@ -107,10 +142,12 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
                     # Update has_attachments flag and attachments list
                     result["attachments"] = attachments
                     result["has_attachments"] = len(attachments) > 0
+                    result["attachments_count"] = len(attachments)
                 except Exception as e:
                     logger.debug(f"Error extracting attachment details: {e}")
                     result["attachments"] = []
                     result["has_attachments"] = False
+                    result["attachments_count"] = 0
             
             # Enhanced metadata
             result["importance"] = getattr(item, "Importance", 1)  # 0=Low, 1=Normal, 2=High

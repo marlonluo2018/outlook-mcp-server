@@ -61,11 +61,151 @@ def extract_email_info_minimal(item) -> Dict[str, Any]:
         sender = getattr(item, 'SenderName', 'Unknown')
         received_time = getattr(item, 'ReceivedTime', None)
         
+        # Extract To recipients - minimal version
+        to_recipients = []
+        try:
+            recipients = getattr(item, 'Recipients', None)
+            if recipients:
+                for recipient in recipients:
+                    if getattr(recipient, 'Type', 0) == 1:  # 1 = To recipient
+                        recipient_info = {
+                            "address": getattr(recipient, 'Address', ''),
+                            "name": getattr(recipient, 'Name', '')
+                        }
+                        if recipient_info["address"] or recipient_info["name"]:
+                            to_recipients.append(recipient_info)
+        except Exception as e:
+            logger.debug(f"Error extracting To recipients in minimal mode: {e}")
+            # Fallback to To field
+            try:
+                to_field = getattr(item, 'To', '')
+                if to_field:
+                    to_list = str(to_field).split(';')
+                    for to_addr in to_list:
+                        to_addr = to_addr.strip()
+                        if to_addr:
+                            to_recipients.append({"address": to_addr, "name": to_addr})
+            except Exception:
+                pass
+        
+        # Extract CC recipients - minimal version
+        cc_recipients = []
+        try:
+            recipients = getattr(item, 'Recipients', None)
+            if recipients:
+                for recipient in recipients:
+                    if getattr(recipient, 'Type', 0) == 2:  # 2 = CC recipient
+                        recipient_info = {
+                            "address": getattr(recipient, 'Address', ''),
+                            "name": getattr(recipient, 'Name', '')
+                        }
+                        if recipient_info["address"] or recipient_info["name"]:
+                            cc_recipients.append(recipient_info)
+        except Exception as e:
+            logger.debug(f"Error extracting CC recipients in minimal mode: {e}")
+            # Fallback to CC field
+            try:
+                cc_field = getattr(item, 'CC', '')
+                if cc_field:
+                    cc_list = str(cc_field).split(';')
+                    for cc_addr in cc_list:
+                        cc_addr = cc_addr.strip()
+                        if cc_addr:
+                            cc_recipients.append({"address": cc_addr, "name": cc_addr})
+            except Exception:
+                pass
+        
+        # Extract attachment information with embedded image detection
+        has_attachments = False
+        attachments_list = []
+        embedded_images_count = 0
+        try:
+            attachments = getattr(item, 'Attachments', None)
+            if attachments and hasattr(attachments, 'Count') and attachments.Count > 0:
+                for i in range(attachments.Count):
+                    attachment = attachments.Item(i + 1)
+                    file_name = getattr(attachment, 'FileName', '') or getattr(attachment, 'DisplayName', 'Unknown')
+                    
+                    # Check if it's an embedded image
+                    is_embedded = False
+                    
+                    # Method 1: Check Content-ID property
+                    try:
+                        if hasattr(attachment, 'PropertyAccessor'):
+                            content_id = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
+                            is_embedded = content_id is not None and len(str(content_id).strip()) > 0
+                            
+                            # Also check for Content-Location property
+                            if not is_embedded:
+                                try:
+                                    content_location = attachment.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3713001F")
+                                    is_embedded = content_location is not None and len(str(content_location).strip()) > 0
+                                except:
+                                    pass
+                    except:
+                        pass
+                    
+                    # Method 2: Check attachment type
+                    attachment_type = getattr(attachment, 'Type', 1)
+                    if attachment_type in [3, 4]:  # 3 = Embedded, 4 = OLE
+                        is_embedded = True
+                    
+                    # Method 3: Check for embedded image naming patterns
+                    is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico'))
+                    if is_image and not is_embedded:
+                        lower_name = file_name.lower()
+                        if any(pattern in lower_name for pattern in ['image', 'img', 'cid:', 'embedded']):
+                            is_embedded = True
+                        elif '.' in lower_name:
+                            name_without_ext = lower_name.rsplit('.', 1)[0]
+                            if name_without_ext.isdigit() or (len(name_without_ext) <= 2 and name_without_ext.isalnum()):
+                                is_embedded = True
+                    
+                    # Method 4: Check attachment size
+                    if is_image and not is_embedded:
+                        try:
+                            attachment_size = getattr(attachment, 'Size', 0)
+                            if attachment_size > 0 and attachment_size < 10000:  # Less than 10KB
+                                is_embedded = True
+                        except:
+                            pass
+                    
+                    # Document files are always real attachments
+                    is_document = file_name.lower().endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar'))
+                    if is_document:
+                        is_embedded = False
+                    
+                    # Count embedded images
+                    if is_embedded and is_image:
+                        embedded_images_count += 1
+                    # Only add non-embedded attachments to the list
+                    elif not is_embedded:
+                        attachment_info = {
+                            "name": file_name,
+                            "size": getattr(attachment, 'Size', 0),
+                            "type": getattr(attachment, 'Type', 1)
+                        }
+                        attachments_list.append(attachment_info)
+                
+                # Update has_attachments flag based on real attachments only
+                has_attachments = len(attachments_list) > 0
+        except Exception as e:
+            logger.debug(f"Error extracting attachments in minimal mode: {e}")
+            has_attachments = False
+            attachments_list = []
+        
         return {
             "entry_id": entry_id,
             "subject": subject,
             "sender": sender,
-            "received_time": str(received_time) if received_time else "Unknown"
+            "received_time": str(received_time) if received_time else "Unknown",
+            "to_recipients": to_recipients,
+            "cc_recipients": cc_recipients,
+            "has_attachments": has_attachments,
+            "attachments": attachments_list,
+            "attachments_count": len(attachments_list),
+            "embedded_images_count": embedded_images_count,
+            "attachments_processed": True
         }
     except Exception as e:
         logger.debug(f"Error in minimal extraction: {e}")
@@ -73,7 +213,14 @@ def extract_email_info_minimal(item) -> Dict[str, Any]:
             "entry_id": getattr(item, 'EntryID', ''),
             "subject": "No Subject",
             "sender": "Unknown",
-            "received_time": "Unknown"
+            "received_time": "Unknown",
+            "to_recipients": [],
+            "cc_recipients": [],
+            "has_attachments": False,
+            "attachments": [],
+            "attachments_count": 0,
+            "embedded_images_count": 0,
+            "attachments_processed": True
         }
 
 def extract_email_info(item) -> Dict[str, Any]:
@@ -203,23 +350,52 @@ def extract_email_info(item) -> Dict[str, Any]:
                     
                     # Check if it's an embedded image
                     is_embedded = False
+                    
+                    # Method 1: Check Content-ID property (most reliable for embedded images)
                     try:
                         property_accessor = _get_cached_com_attribute(attachment, 'PropertyAccessor')
                         if property_accessor:
                             content_id = property_accessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F")
-                            is_embedded = content_id is not None and len(str(content_id)) > 0
+                            is_embedded = content_id is not None and len(str(content_id).strip()) > 0
+                            
+                            # Also check for Content-Location property
+                            if not is_embedded:
+                                try:
+                                    content_location = property_accessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3713001F")
+                                    is_embedded = content_location is not None and len(str(content_location).strip()) > 0
+                                except:
+                                    pass
                     except:
                         pass
                     
-                    # Additional check for image files with common embedded naming pattern
-                    if not is_embedded:
-                        is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))
-                        if is_image and file_name.lower().startswith('image'):
-                            is_embedded = True
+                    # Method 2: Check attachment type
+                    attachment_type = _get_cached_com_attribute(attachment, 'Type', 1)
+                    if attachment_type in [3, 4]:  # 3 = Embedded, 4 = OLE
+                        is_embedded = True
                     
-                    # PDF files are always considered real attachments
-                    is_pdf = file_name.lower().endswith('.pdf')
-                    if is_pdf:
+                    # Method 3: Check for embedded image naming patterns
+                    is_image = file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico'))
+                    if is_image and not is_embedded:
+                        lower_name = file_name.lower()
+                        if any(pattern in lower_name for pattern in ['image', 'img', 'cid:', 'embedded']):
+                            is_embedded = True
+                        elif '.' in lower_name:
+                            name_without_ext = lower_name.rsplit('.', 1)[0]
+                            if name_without_ext.isdigit() or (len(name_without_ext) <= 2 and name_without_ext.isalnum()):
+                                is_embedded = True
+                    
+                    # Method 4: Check attachment size
+                    if is_image and not is_embedded:
+                        try:
+                            attachment_size = _get_cached_com_attribute(attachment, 'Size', 0)
+                            if attachment_size > 0 and attachment_size < 10000:  # Less than 10KB
+                                is_embedded = True
+                        except:
+                            pass
+                    
+                    # PDF files and documents are always real attachments
+                    is_document = file_name.lower().endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar'))
+                    if is_document:
                         is_embedded = False
                     
                     # Only add non-embedded attachments to the list
@@ -234,10 +410,12 @@ def extract_email_info(item) -> Dict[str, Any]:
                 # Update has_attachments flag based on real attachments only
                 email_info["has_attachments"] = len(attachments_list) > 0
                 email_info["attachments"] = attachments_list
+                email_info["attachments_count"] = len(attachments_list)
             except Exception as e:
                 logger.debug(f"Error extracting attachment details: {e}")
                 email_info["attachments"] = []
                 email_info["has_attachments"] = False
+                email_info["attachments_count"] = 0
         else:
             email_info["attachments"] = []
             email_info["has_attachments"] = False
