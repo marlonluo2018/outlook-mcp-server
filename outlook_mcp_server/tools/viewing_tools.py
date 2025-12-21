@@ -13,10 +13,27 @@ def view_email_cache_tool(page: int = 1) -> dict:
         page: Page number to view (1-based, each page contains 5 emails)
 
     Returns:
-        dict: Response containing email previews
+        dict: Response containing email previews in JSON format
         {
-            "type": "text",
-            "text": "Formatted email previews here"
+            "type": "json",
+            "data": {
+                "page": 1,
+                "total_pages": 5,
+                "total_emails": 23,
+                "emails": [
+                    {
+                        "number": 1,
+                        "subject": "Email Subject",
+                        "from": "Sender Name",
+                        "to": "Recipient Name",
+                        "cc": "CC Recipient",
+                        "received": "2023-12-21 10:30:00",
+                        "status": "Read",
+                        "attachments": "Yes",
+                        "embedded_images_count": 2
+                    }
+                ]
+            }
         }
     """
     if not isinstance(page, int) or page < 1:
@@ -24,14 +41,27 @@ def view_email_cache_tool(page: int = 1) -> dict:
     
     try:
         if not email_cache_order:
-            return {"type": "text", "text": "No emails in cache. Please load emails first using list_recent_emails or search functions."}
+            return {
+                "type": "json", 
+                "data": {
+                    "error": "No emails in cache",
+                    "message": "Please load emails first using list_recent_emails or search functions."
+                }
+            }
         
         # Calculate pagination
         start_idx = (page - 1) * 5
         end_idx = start_idx + 5
+        total_pages = (len(email_cache_order) + 4) // 5
         
         if start_idx >= len(email_cache_order):
-            return {"type": "text", "text": f"Page {page} is out of range. Available range: 1-{(len(email_cache_order) + 4) // 5}"}
+            return {
+                "type": "json", 
+                "data": {
+                    "error": "Page out of range",
+                    "message": f"Page {page} is out of range. Available range: 1-{total_pages}"
+                }
+            }
         
         # Get emails for this page
         page_emails = []
@@ -140,25 +170,25 @@ def view_email_cache_tool(page: int = 1) -> dict:
                     "embedded_images_count": embedded_images_count
                 })
         
-        # Format the output
-        result = f"Cached Emails (Page {page} of {(len(email_cache_order) + 4) // 5}):\n"
-        result += f"Total emails in cache: {len(email_cache_order)}\n\n"
-        
-        for email in page_emails:
-            result += f"{email['number']}. {email['subject']}\n"
-            result += f"   From: {email['from']}\n"
-            result += f"   To: {email['to']}\n"
-            result += f"   CC: {email['cc']}\n"
-            result += f"   Received: {email['received']}\n"
-            result += f"   Status: {email['status']}\n"
-            embedded_images_display = str(email['embedded_images_count']) if email['embedded_images_count'] > 0 else "None"
-            result += f"   Embedded Images: {embedded_images_display}\n"
-            result += f"   Attachments: {email['attachments']}\n\n"
-        
-        return {"type": "text", "text": result}
+        # Return JSON format
+        return {
+            "type": "json",
+            "data": {
+                "page": page,
+                "total_pages": total_pages,
+                "total_emails": len(email_cache_order),
+                "emails": page_emails
+            }
+        }
         
     except Exception as e:
-        return {"type": "text", "text": f"Error viewing email cache: {str(e)}"}
+        return {
+            "type": "json", 
+            "data": {
+                "error": "Error viewing email cache",
+                "message": str(e)
+            }
+        }
 
 
 def get_email_by_number_tool(email_number: int, mode: str = "basic", include_attachments: bool = True, embed_images: bool = True) -> dict:

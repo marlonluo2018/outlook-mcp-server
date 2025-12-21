@@ -196,7 +196,36 @@ def interactive_mode():
                     
                 while True:
                     result = view_email_cache(page)
-                    print(f"\n{result}")
+                    
+                    # Handle JSON response format
+                    if result.get("type") == "json":
+                        data = result.get("data", {})
+                        
+                        # Check for errors
+                        if "error" in data:
+                            print(f"\nError: {data['error']}")
+                            if "message" in data:
+                                print(f"Message: {data['message']}")
+                            break
+                        
+                        # Display email information
+                        print(f"\nCached Emails (Page {data['page']} of {data['total_pages']}):")
+                        print(f"Total emails in cache: {data['total_emails']}\n")
+                        
+                        for email in data['emails']:
+                            print(f"{email['number']}. {email['subject']}")
+                            print(f"   From: {email['from']}")
+                            print(f"   To: {email['to']}")
+                            print(f"   CC: {email['cc']}")
+                            print(f"   Received: {email['received']}")
+                            print(f"   Status: {email['status']}")
+                            embedded_images_display = str(email['embedded_images_count']) if email['embedded_images_count'] > 0 else "None"
+                            print(f"   Embedded Images: {embedded_images_display}")
+                            print(f"   Attachments: {email['attachments']}")
+                            print()
+                    else:
+                        # Fallback for any other format
+                        print(f"\n{result}")
                     
                     print("\nNavigation:")
                     print("n - Next page")
