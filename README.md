@@ -222,11 +222,11 @@ Your AI assistant helps you find emails using natural language commands:
 
 **How it works:**
 - **Search Tools Available:**
-  - `list_recent_emails_tool()` - Load recent emails from last X days
-  - `search_email_by_subject_tool()` - Search email subjects only
-  - `search_email_by_sender_name_tool()` - Search by sender name
-  - `search_email_by_recipient_name_tool()` - Search by recipient name
-  - `search_email_by_body_tool()` - Search email body content (slower)
+  - `list_recent_emails_tool()` - Load recent emails from last 7 days (max: 30 days)
+  - `search_email_by_subject_tool()` - Search email subjects only (default: 7 days, max: 30 days)
+  - `search_email_by_sender_name_tool()` - Search by sender name (default: 7 days, max: 30 days)
+  - `search_email_by_recipient_name_tool()` - Search by recipient name (default: 7 days, max: 30 days)
+  - `search_email_by_body_tool()` - Search email body content (slower, default: 7 days, max: 30 days)
 - Results are loaded into the persistent unified cache (5 emails per page for browsing, with backend limit of 1000 entries)
 
 #### **Phase 2: Browse & Preview Emails**
@@ -294,16 +294,16 @@ The AI helps you send emails to multiple recipients efficiently:
 
 ### Email Search & Loading
 - `get_folder_list_tool()` - Lists all Outlook mail folders
-- `list_recent_emails_tool(days=7, folder_name=None)` - Load recent emails
+- `list_recent_emails_tool(days=7, folder_name=None)` - Load recent emails (default: 7 days, max: 30 days)
 - `load_emails_by_folder_tool(folder_path, days=None, max_emails=None)` - Load emails from specific folder with flexible options
-  - **Time-based**: `load_emails_by_folder_tool("Inbox", days=7)` - Load emails from last 7 days
+  - **Time-based**: `load_emails_by_folder_tool("Inbox", days=7)` - Load emails from last 7 days (max: 30 days)
   - **Number-based**: `load_emails_by_folder_tool("Inbox", max_emails=50)` - Load 50 most recent emails
   - **⚠️ Mutual Exclusion**: Cannot use both `days` and `max_emails` together - choose one approach
   - **Folder paths**: Use full paths like "user@company.com/Inbox/SubFolder"
-- `search_email_by_subject_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by subject
-- `search_email_by_sender_name_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by sender
-- `search_email_by_recipient_name_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by recipient
-- `search_email_by_body_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by body
+- `search_email_by_subject_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by subject (default: 7 days, max: 30 days)
+- `search_email_by_sender_name_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by sender (default: 7 days, max: 30 days)
+- `search_email_by_recipient_name_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by recipient (default: 7 days, max: 30 days)
+- `search_email_by_body_tool(search_term, days=7, folder_name=None, match_all=True)` - Search by body (default: 7 days, max: 30 days)
 
 ### Folder Management
 **⚠️ Important Workflow**: For folder operations, always start with `get_folder_list_tool()` to discover the folder structure first.

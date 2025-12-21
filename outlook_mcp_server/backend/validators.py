@@ -30,7 +30,7 @@ class EmailSearchParams(BaseModel):
 class EmailListParams(BaseModel):
     """Parameters for listing emails"""
 
-    days: int = Field(default=7, ge=1, le=365, description="Number of days to look back")
+    days: int = Field(default=7, ge=1, le=30, description="Number of days to look back")
     folder_name: Optional[str] = Field(default=None, description="Folder name to list from")
 
     @field_validator("folder_name")

@@ -58,8 +58,8 @@ Advanced folder loading techniques for handling large enterprise folders efficie
 def get_folder_emails_with_progressive_filtering(folder, max_emails=50):
     """Use progressive date filtering to optimize folder loading."""
     
-    # Start with small time windows and expand gradually
-    days_to_try = [7, 14, 30, 60, 90]
+    # Start with small time windows and expand gradually (max: 30 days)
+    days_to_try = [7, 14, 30]
     items = []
     
     for days in days_to_try:

@@ -28,8 +28,8 @@ def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> Tuple[Li
     3. Save immediately to disk
     """
     try:
-        # Default to 365 days if not specified to ensure we get results
-        effective_days = days or 365
+        # Default to 30 days if not specified to ensure we get results
+        effective_days = days or 30
         params = EmailListParams(days=effective_days, folder_name=folder_name)
         
         # Minimal logging for performance

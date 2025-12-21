@@ -15,14 +15,14 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
     """Load emails into cache and return count message.
 
     Args:
-        days: Days to look back (1-30, default:7)
+        days: Days to look back (1-30, default:7, max:30)
         folder_name: Folder to search (default:Inbox, or use full path like "user@company.com/Inbox")
 
     Returns:
         dict: Response containing email count message:
         {
             "type": "text",
-            "text": "Found X emails from last Y days. Use 'view_email_cache_tool' to view them."
+            "text": "Found X emails from last N days (max 30 days). Use 'view_email_cache_tool' to view them."
         }
         
     Note:
@@ -32,6 +32,8 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
     # Input validation
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
+    if days < 1 or days > 30:
+        raise ValueError("Days parameter must be between 1 and 30")
     
     # Ensure folder_name is a string or None
     if folder_name is not None and not isinstance(folder_name, str):
@@ -51,7 +53,7 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
         emails, message = list_recent_emails(folder_name=folder_name, days=days)
         logger.info(f"list_recent_emails returned: {len(emails)} emails, message: {message}")
         
-        return {"type": "text", "text": message + ". Use 'view_email_cache_tool' to view them."}
+        return {"type": "text", "text": message + " (max 30 days). Use 'view_email_cache_tool' to view them."}
     except Exception as e:
         logger.error(f"Error in list_recent_emails_tool: {e}")
         import traceback
@@ -69,7 +71,7 @@ def search_email_by_subject_tool(
 
     Args:
         search_term: Plain text search term (colons are allowed as part of regular text)
-        days: Number of days to look back (default: 7, max: 30)
+        days: Number of days to look back (1-30, default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox, or use full path like "user@company.com/Inbox/SubFolder")
         match_all: If True, requires ALL search terms to match (AND logic, default).
                   If False, matches ANY search term (OR logic)
@@ -78,7 +80,7 @@ def search_email_by_subject_tool(
         dict: Response containing email count message
         {
             "type": "text",
-            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
+            "text": "Found X matching emails from last N days (max 30 days). Use 'view_email_cache_tool' to view them."
         }
         
     Note:
@@ -90,8 +92,10 @@ def search_email_by_subject_tool(
         raise ValueError("Search term must be a non-empty string")
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
+    if days < 1 or days > 30:
+        raise ValueError("Days parameter must be between 1 and 30")
     emails, note = search_email_by_subject(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
     return {"type": "text", "text": result}
 
 
@@ -107,7 +111,7 @@ def search_email_by_sender_name_tool(
 
     Args:
         search_term: Plain text search term for sender name (colons are allowed as part of regular text)
-        days: Number of days to look back (default: 7, max: 30)
+        days: Number of days to look back (1-30, default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox, or use full path like "user@company.com/Inbox/SubFolder")
         match_all: If True, requires ALL search terms to match (AND logic, default).
                   If False, matches ANY search term (OR logic)
@@ -116,7 +120,7 @@ def search_email_by_sender_name_tool(
         dict: Response containing email count message
         {
             "type": "text",
-            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
+            "text": "Found X matching emails from last N days (max 30 days). Use 'view_email_cache_tool' to view them."
         }
         
     Note:
@@ -128,8 +132,10 @@ def search_email_by_sender_name_tool(
         raise ValueError("Search term must be a non-empty string")
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
+    if days < 1 or days > 30:
+        raise ValueError("Days parameter must be between 1 and 30")
     emails, note = search_email_by_sender(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
     return {"type": "text", "text": result}
 
 
@@ -145,7 +151,7 @@ def search_email_by_recipient_name_tool(
 
     Args:
         search_term: Plain text search term for recipient name (colons are allowed as part of regular text)
-        days: Number of days to look back (default: 7, max: 30)
+        days: Number of days to look back (1-30, default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox, or use full path like "user@company.com/Inbox/SubFolder")
         match_all: If True, requires ALL search terms to match (AND logic, default).
                   If False, matches ANY search term (OR logic)
@@ -154,7 +160,7 @@ def search_email_by_recipient_name_tool(
         dict: Response containing email count message
         {
             "type": "text",
-            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
+            "text": "Found X matching emails from last N days (max 30 days). Use 'view_email_cache_tool' to view them."
         }
         
     Note:
@@ -166,8 +172,10 @@ def search_email_by_recipient_name_tool(
         raise ValueError("Search term must be a non-empty string")
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
+    if days < 1 or days > 30:
+        raise ValueError("Days parameter must be between 1 and 30")
     emails, note = search_email_by_recipient(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
     return {"type": "text", "text": result}
 
 
@@ -186,7 +194,7 @@ def search_email_by_body_tool(
         search_term: Plain text search term (colons are allowed as part of regular text)
                     For exact phrase matching, enclose the term in quotes (e.g., "red hat partner day")
                     For word-based matching, use the term without quotes (e.g., red hat partner day)
-        days: Number of days to look back (default: 7, max: 30)
+        days: Number of days to look back (1-30, default: 7, max: 30)
         folder_name: Optional folder name to search (default: Inbox, or use full path like "user@company.com/Inbox/SubFolder")
         match_all: If True, requires ALL search terms to match (AND logic, default).
                   If False, matches ANY search term (OR logic)
@@ -199,7 +207,7 @@ def search_email_by_body_tool(
         For top-level folders, you can use just the folder name or full path: "Inbox" or "user@company.com/Inbox"
         {
             "type": "text",
-            "text": "Found X matching emails from last Y days. Use 'view_email_cache_tool' to view them."
+            "text": "Found X matching emails from last N days (max 30 days). Use 'view_email_cache_tool' to view them."
         }
 
     """
@@ -207,6 +215,8 @@ def search_email_by_body_tool(
         raise ValueError("Search term must be a non-empty string")
     if not isinstance(days, int):
         raise ValueError("Days parameter must be an integer")
+    if days < 1 or days > 30:
+        raise ValueError("Days parameter must be between 1 and 30")
     emails, note = search_email_by_body(search_term, days, folder_name, match_all=match_all)
-    result = f"Found {len(emails)} matching emails{note}. Use 'view_email_cache_tool' to view them."
+    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
     return {"type": "text", "text": result}
