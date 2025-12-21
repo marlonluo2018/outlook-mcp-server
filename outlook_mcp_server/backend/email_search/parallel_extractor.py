@@ -15,17 +15,43 @@ _thread_local = threading.local()
 def _extract_email_info_parallel(item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Extract email info from item data in a thread-safe manner."""
     try:
-        # Extract basic attributes only - this is the minimal version
+        # Extract basic attributes
         entry_id = item_data.get('EntryID', '')
         subject = item_data.get('Subject', 'No Subject')
         sender = item_data.get('SenderName', 'Unknown')
         received_time = item_data.get('ReceivedTime', None)
         
+        # Extract recipients - handle both formats
+        to_recipients = item_data.get('to_recipients', [])
+        cc_recipients = item_data.get('cc_recipients', [])
+        
+        # If recipients are not already extracted, try to extract from To/CC fields
+        if not to_recipients and item_data.get('To'):
+            to_field = str(item_data.get('To', ''))
+            if to_field:
+                to_list = to_field.split(';')
+                to_recipients = [{"address": addr.strip(), "name": addr.strip()} for addr in to_list if addr.strip()]
+        
+        if not cc_recipients and item_data.get('CC'):
+            cc_field = str(item_data.get('CC', ''))
+            if cc_field:
+                cc_list = cc_field.split(';')
+                cc_recipients = [{"address": addr.strip(), "name": addr.strip()} for addr in cc_list if addr.strip()]
+        
+        # Extract attachment info
+        has_attachments = item_data.get('has_attachments', False)
+        attachments = item_data.get('attachments', [])
+        
         return {
             "entry_id": entry_id,
             "subject": subject,
             "sender": sender,
-            "received_time": str(received_time) if received_time else "Unknown"
+            "received_time": str(received_time) if received_time else "Unknown",
+            "to_recipients": to_recipients,
+            "cc_recipients": cc_recipients,
+            "has_attachments": has_attachments,
+            "attachments": attachments,
+            "unread": item_data.get('UnRead', False)
         }
     except Exception as e:
         logger.debug(f"Error in parallel extraction: {e}")
@@ -33,7 +59,12 @@ def _extract_email_info_parallel(item_data: Dict[str, Any]) -> Dict[str, Any]:
             "entry_id": item_data.get('EntryID', ''),
             "subject": "No Subject",
             "sender": "Unknown",
-            "received_time": "Unknown"
+            "received_time": "Unknown",
+            "to_recipients": [],
+            "cc_recipients": [],
+            "has_attachments": False,
+            "attachments": [],
+            "unread": False
         }
 
 def extract_emails_parallel(items: List[Any], max_workers: int = 4) -> List[Dict[str, Any]]:
@@ -61,8 +92,31 @@ def extract_emails_parallel(items: List[Any], max_workers: int = 4) -> List[Dict
                     'EntryID': getattr(item, 'EntryID', ''),
                     'Subject': getattr(item, 'Subject', 'No Subject'),
                     'SenderName': getattr(item, 'SenderName', 'Unknown'),
-                    'ReceivedTime': getattr(item, 'ReceivedTime', None)
+                    'ReceivedTime': getattr(item, 'ReceivedTime', None),
+                    'To': getattr(item, 'To', ''),
+                    'CC': getattr(item, 'CC', ''),
+                    'UnRead': getattr(item, 'UnRead', False)
                 }
+                
+                # Extract attachment info
+                try:
+                    attachments = getattr(item, 'Attachments', None)
+                    if attachments:
+                        item_dict['has_attachments'] = attachments.Count > 0
+                        item_dict['attachments'] = [
+                            {
+                                'filename': getattr(att, 'FileName', 'Unknown'),
+                                'size': getattr(att, 'Size', 0)
+                            }
+                            for att in attachments
+                        ]
+                    else:
+                        item_dict['has_attachments'] = False
+                        item_dict['attachments'] = []
+                except Exception:
+                    item_dict['has_attachments'] = False
+                    item_dict['attachments'] = []
+                
                 item_dicts.append(item_dict)
             except Exception as e:
                 logger.debug(f"Error converting item to dict: {e}")
@@ -118,11 +172,59 @@ def extract_emails_sequential_fallback(items: List[Any]) -> List[Dict[str, Any]]
             received_time = getattr(item, 'ReceivedTime', None)
             received_str = str(received_time) if received_time else "Unknown"
             
+            # Extract recipient information
+            to_field = getattr(item, 'To', '')
+            cc_field = getattr(item, 'CC', '')
+            
+            # Parse recipients from To field
+            to_recipients = []
+            if to_field:
+                try:
+                    to_list = str(to_field).split(';')
+                    to_recipients = [{"address": addr.strip(), "name": addr.strip()} for addr in to_list if addr.strip()]
+                except Exception:
+                    to_recipients = []
+            
+            # Parse recipients from CC field
+            cc_recipients = []
+            if cc_field:
+                try:
+                    cc_list = str(cc_field).split(';')
+                    cc_recipients = [{"address": addr.strip(), "name": addr.strip()} for addr in cc_list if addr.strip()]
+                except Exception:
+                    cc_recipients = []
+            
+            # Extract attachment info
+            has_attachments = False
+            attachments = []
+            try:
+                attachments_obj = getattr(item, 'Attachments', None)
+                if attachments_obj:
+                    has_attachments = attachments_obj.Count > 0
+                    attachments = [
+                        {
+                            'filename': getattr(att, 'FileName', 'Unknown'),
+                            'size': getattr(att, 'Size', 0)
+                        }
+                        for att in attachments_obj
+                    ]
+            except Exception:
+                has_attachments = False
+                attachments = []
+            
+            # Extract unread status
+            unread = getattr(item, 'UnRead', False)
+            
             email_data = {
                 "entry_id": entry_id,
                 "subject": subject,
                 "sender": sender,
-                "received_time": received_str
+                "received_time": received_str,
+                "to_recipients": to_recipients,
+                "cc_recipients": cc_recipients,
+                "has_attachments": has_attachments,
+                "attachments": attachments,
+                "unread": unread
             }
             
             if hasattr(items, '__len__'):
