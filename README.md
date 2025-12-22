@@ -158,24 +158,9 @@ python outlook_mcp_server/__main__.py
 ```
 
 **Step 2: Configure Your AI Assistant**
-Use this configuration in your MCP client settings:
-```json
-{
-  "mcpServers": {
-    "outlook-mcp-server": {
-      "command": "python",
-      "args": ["outlook_mcp_server/__main__.py"]
-    }
-  }
-}
-```
 
-**Quick Setup**: Use the provided `mcp-config-direct.json` file
-
-#### ⚙️ **Configuration Option 3: Direct Path Configuration**
-**Purpose**: For users who need to specify the exact path to the main module
-
-**Configuration in your MCP client settings:**
+**Windows Absolute Path Configuration (Required)**
+MCP clients run from various working directories, so absolute paths are required:
 ```json
 {
   "mcpServers": {
@@ -187,6 +172,10 @@ Use this configuration in your MCP client settings:
 }
 ```
 
+**⚠️ Important**: Relative paths (`outlook_mcp_server/__main__.py`) will fail because MCP clients don't run from the project directory.
+
+**Quick Setup**: Use the provided `mcp-config-direct.json` file (update the path to match your installation location)
+
 ## 🤖 AI Assistant System Prompt
 
 Your AI assistant uses a specialized prompt template that defines its role and behavior. This ensures safe and effective email management.
@@ -197,7 +186,7 @@ The system prompt is defined in [`agent_prompt_template.md`](https://github.com/
 
 1. **Edit the template file** to personalize the assistant's behavior
 2. **Replace placeholders** like `[User Name]` and `[User Email]` with your information
-3. **The assistant will follow** the structured workflows and safety constraints defined in the template
+3. **The assistant will follow** the structured workflows and safety guidelines defined in the template
 
 ### Key Safety Features
 - **Never sends emails** without explicit user confirmation
@@ -311,13 +300,18 @@ The AI helps you send emails to multiple recipients efficiently:
 - `get_folder_list_tool()` - **REQUIRED FIRST STEP** - Lists all Outlook mail folders to understand structure
 - `move_folder_tool(source_folder_path, target_parent_path)` - Move folders between locations (use full paths from folder list)
 - `create_folder_tool(folder_name, parent_folder_name=None)` - Create new folders (supports nested paths like "Inbox/SubFolder1/SubFolder2")
-- `remove_folder_tool(folder_name)` - Delete folders and their contents (use full path from folder list)
+- `remove_folder_tool(folder_name)` - **Permanently delete** folders and their contents - cannot be undone (use full path from folder list)
 - `move_email_tool(email_number, target_folder_name)` - Move emails between folders (requires full folder path from folder list)
 
 **Folder Operation Workflow:**
 1. **Discover Structure**: Use `get_folder_list_tool()` to see available folders
 2. **Identify Paths**: Note the full folder paths (e.g., "user@company.com/Inbox/FolderName")
 3. **Execute Operation**: Use the appropriate tool with the correct full path
+
+**⚠️ Important Safety Notes:**
+- **`remove_folder_tool` permanently deletes folders** - This action cannot be undone and will permanently remove the folder and all its contents
+- **`delete_email_by_number_tool` performs soft delete** - Emails are moved to Deleted Items folder and can be recovered
+- **Always double-check folder paths** before performing deletion operations
 
 ### Email Viewing & Browsing
 - `view_email_cache_tool(page=1)` - View 5 emails per page
