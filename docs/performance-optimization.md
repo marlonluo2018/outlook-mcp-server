@@ -1,4 +1,4 @@
-# Performance Optimization Guide
+<REPLACED>
 
 This document details the performance optimization strategies implemented in the Outlook MCP Server to handle large email volumes efficiently and reduce response times.
 
