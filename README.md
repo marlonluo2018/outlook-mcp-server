@@ -142,23 +142,6 @@ Talk naturally to your AI assistant:
 
 ## 🎯 Quick Start
 
-### ⚡ **One-Minute Demo (Try Before You Install)**
-
-Want to see it in action first? Watch our quick demo:
-
-<div align="center">
-
-**🎥 [Watch 60-Second Demo Video](https://github.com/marlonluo2018/outlook-mcp-server#)** *(Coming Soon)*
-
-| Step | What You'll See | Time |
-|------|----------------|------|
-| 1 | Natural language email search | 15s |
-| 2 | AI-powered email summarization | 15s |
-| 3 | Smart reply drafting | 15s |
-| 4 | Batch email operations | 15s |
-
-</div>
-
 ### 📋 **Prerequisites Checklist**
 - ✅ **Python 3.8+** ([Download here](https://python.org/downloads/))
 - ✅ **Microsoft Outlook 2016+** (must be installed)
