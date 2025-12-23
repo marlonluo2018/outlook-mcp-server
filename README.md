@@ -350,13 +350,13 @@ The AI helps you send emails to multiple recipients efficiently:
 
 **How it works:**
 1. **Template Selection** - Uses an email from your cache as template
-2. **Recipient Loading** - Reads email addresses from CSV file with 'email' column
+2. **Recipient Loading** - Reads email addresses from CSV file with 'email' column (must be lowercase)
 3. **Batch Processing** - Automatically splits large lists into batches of 500
 4. **Content Customization** - Adds your custom text before original email
 5. **Safe Sending** - Sends via BCC to protect recipient privacy
 
 **Batch Email Tools:**
-- `batch_forward_email_tool()` - Forward template email to multiple recipients from CSV
+- `batch_forward_email_tool()` - Forward template email to multiple recipients from CSV (requires 'email' column in lowercase)
 
 **🔒 Key Safety Feature**: No emails are sent without your explicit approval!
 
@@ -417,15 +417,27 @@ The AI helps you send emails to multiple recipients efficiently:
 - `compose_email_tool(recipient_email, subject, body, cc_email=None)` - Compose new email
 
 ### Email Batch Operations (Requires User Confirmation)
-- `batch_forward_email_tool(email_number, csv_path, custom_text="")` - Forward email to multiple recipients from CSV file
+- `batch_forward_email_tool(email_number, csv_path, custom_text="")` - Forward email to multiple recipients from CSV file (requires 'email' column in lowercase)
 
 **Batch Email Feature:**
 - Uses an email from your cache as a template
-- Reads recipient email addresses from a CSV file with 'email' column
+- Reads recipient email addresses from a CSV file with 'email' column (must be lowercase)
 - Automatically splits large lists into batches of 500 (Outlook BCC limit)
 - Adds custom text before the original email content
 - Preserves email formatting with consistent break lines
 - Sends via BCC to protect recipient privacy
+
+**CSV File Requirements:**
+- File must be in CSV format
+- Must contain exactly one column named "email" (lowercase)
+- Each row should contain one email address
+- Example CSV content:
+```
+email
+user1@example.com
+user2@example.com
+user3@example.com
+```
 
 **Search Behavior:**
 - All search tools support `match_all=True` (AND logic) or `match_all=False` (OR logic)
@@ -460,11 +472,11 @@ The AI helps you send emails to multiple recipients efficiently:
 
 ### Scenario 4: Event Organizer
 **Problem**: Need to forward announcements to large contact lists
-**Solution**: "Use the batch_forward_email_tool to forward this meeting invitation to all attendees from my contacts.csv file"
+**Solution**: "Use the batch_forward_email_tool to forward this meeting invitation to all attendees from my contacts.csv file (ensure CSV has 'email' column in lowercase)"
 
 ### Scenario 5: HR Manager
 **Problem**: Forward company-wide communications to employees
-**Solution**: "Use the batch_forward_email_tool to forward this company announcement to all employees in employee_list.csv"
+**Solution**: "Use the batch_forward_email_tool to forward this company announcement to all employees in employee_list.csv (ensure CSV has 'email' column in lowercase)"
 
 ## 💻 CLI Interface (Human Interaction)
 
