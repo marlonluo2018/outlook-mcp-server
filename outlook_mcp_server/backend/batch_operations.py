@@ -64,7 +64,11 @@ def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = ""
         results = []
 
         with OutlookSessionManager() as session:
-            email_id = cache_items[email_number - 1]["id"]
+            # Get email data from cache - use entry_id instead of id
+            email_data = cache_items[email_number - 1]
+            email_id = email_data.get("entry_id") or email_data.get("id")
+            if not email_id:
+                raise ValueError(f"Email #{email_number} does not have a valid ID field")
             template = session.namespace.GetItemFromID(email_id)
 
             for i, batch in enumerate(batches, 1):
