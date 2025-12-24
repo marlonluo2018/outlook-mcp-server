@@ -184,22 +184,6 @@ def get_pagination_info(cache_size: int, per_page: int) -> dict:
     return {"total_pages": total_pages, "total_items": cache_size}
 
 
-def validate_email_address(email: str) -> bool:
-    """
-    Validate email address format.
-
-    Args:
-        email: Email address to validate
-
-    Returns:
-        bool: True if valid, False otherwise
-    """
-    import re
-
-    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-    return bool(re.match(pattern, email.strip()))
-
-
 def sanitize_search_term(search_term: str) -> str:
     """
     Sanitize search term to prevent DASL injection.

@@ -5,16 +5,17 @@ This module provides functions for performing server-side searches using
 Outlook's AdvancedSearch functionality, which is more efficient for large folders.
 """
 
-import logging
+# Standard library imports
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, List
 
+# Local application imports
+from ..logging_config import get_logger
 from ..outlook_session.session_manager import OutlookSessionManager
 from .search_common import get_date_limit
 
-# Set up logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def server_side_search(

@@ -1,31 +1,43 @@
-import csv
-import logging
+"""Batch email operations for forwarding and replying to multiple recipients."""
 
+# Standard library imports
+import csv
+
+# Local application imports
+from .logging_config import get_logger
 from .outlook_session.session_manager import OutlookSessionManager
 from .shared import email_cache
-from .utils import safe_encode_text, validate_email_address
+from .utils import safe_encode_text
+from .validation import (
+    BatchLimits,
+    BodyFormat,
+    DisplayConstants,
+    OutlookConstants,
+    ValidationError,
+    validate_email_address
+)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = "") -> str:
     """Forward email to recipients in batches of 500 (Outlook BCC limit)"""
     # Input validation
     if not isinstance(email_number, int) or email_number < 1:
-        raise ValueError("Email number must be a positive integer")
+        raise ValidationError("Email number must be a positive integer")
 
     if not csv_path or not isinstance(csv_path, str):
-        raise ValueError("CSV path must be a non-empty string")
+        raise ValidationError("CSV path must be a non-empty string")
 
     if not isinstance(custom_text, str):
-        raise ValueError("Custom text must be a string")
+        raise ValidationError("Custom text must be a string")
 
     if not email_cache:
-        raise ValueError("No emails available - please list emails first.")
+        raise ValidationError("No emails available - please list emails first.")
 
     cache_items = list(email_cache.values())
     if not 1 <= email_number <= len(cache_items):
-        raise ValueError(f"Email #{email_number} not found in current listing.")
+        raise ValidationError(f"Email #{email_number} not found in current listing.")
 
     try:
         # Clean and validate CSV path
@@ -35,7 +47,7 @@ def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = ""
         with open(clean_path, "r", newline="", encoding="utf-8-sig") as csvfile:
             reader = csv.DictReader(csvfile)
             if "email" not in reader.fieldnames:
-                raise ValueError("CSV must contain an 'email' column")
+                raise ValidationError("CSV must contain an 'email' column")
 
             recipients = []
             invalid_emails = []
@@ -43,22 +55,23 @@ def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = ""
             for row in reader:
                 email = row.get("email", "").strip()
                 if email:
-                    if validate_email_address(email):
-                        recipients.append(email)
-                    else:
+                    try:
+                        validated_email = validate_email_address(email)
+                        recipients.append(validated_email)
+                    except ValidationError:
                         invalid_emails.append(email)
                         logger.warning(f"Invalid email address found: {email}")
 
         if invalid_emails:
-            raise ValueError(
+            raise ValidationError(
                 f"Invalid email addresses found: {', '.join(invalid_emails[:5])}{'...' if len(invalid_emails) > 5 else ''}"
             )
 
         if not recipients:
-            raise ValueError("No valid email addresses found in CSV")
+            raise ValidationError("No valid email addresses found in CSV")
 
         # Process in batches of 500 (Outlook BCC limit)
-        batch_size = 500
+        batch_size = BatchLimits.OUTLOOK_BCC_LIMIT
         batches = [recipients[i : i + batch_size] for i in range(0, len(recipients), batch_size)]
         total_recipients = len(recipients)
         results = []
@@ -68,13 +81,13 @@ def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = ""
             email_data = cache_items[email_number - 1]
             email_id = email_data.get("entry_id") or email_data.get("id")
             if not email_id:
-                raise ValueError(f"Email #{email_number} does not have a valid ID field")
+                raise ValidationError(f"Email #{email_number} does not have a valid ID field")
             template = session.namespace.GetItemFromID(email_id)
 
             for i, batch in enumerate(batches, 1):
                 try:
                     # Create a regular mail item instead of using Forward()
-                    mail = session.outlook.CreateItem(0)  # 0 = olMailItem
+                    mail = session.outlook.CreateItem(OutlookConstants.OL_MAIL_ITEM)
 
                     # Copy relevant properties from template with encoding handling
                     try:
@@ -102,7 +115,7 @@ def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = ""
                         )
 
                         if hasattr(template, "HTMLBody") and template.HTMLBody:
-                            mail.BodyFormat = 2  # 2 = olFormatHTML
+                            mail.BodyFormat = BodyFormat.OL_FORMAT_HTML
                             html_body = safe_encode_text(template.HTMLBody, "batch_html_body")
 
                             # Build HTML email headers
@@ -120,7 +133,7 @@ def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = ""
 
                             mail.HTMLBody = header_html + html_body
                         else:
-                            mail.BodyFormat = 1  # 1 = olFormatPlain
+                            mail.BodyFormat = BodyFormat.OL_FORMAT_PLAIN
                             plain_body = safe_encode_text(
                                 getattr(template, "Body", ""), "batch_plain_body"
                             )
@@ -134,12 +147,12 @@ def batch_forward_emails(email_number: int, csv_path: str, custom_text: str = ""
                             header_lines.extend(
                                 [
                                     "",
-                                    "_" * 50,
+                                    "_" * DisplayConstants.SEPARATOR_LINE_LENGTH,
                                     f"From: {sender_name}",
                                     f"Sent: {sent_on}",
                                     f"To: {to_field}",
                                     f"Subject: {subject}",
-                                    "_" * 50,
+                                    "_" * DisplayConstants.SEPARATOR_LINE_LENGTH,
                                     "",
                                 ]
                             )

@@ -1,8 +1,9 @@
 """Email operations tools for Outlook MCP Server."""
 
-from typing import Union, List, Optional
+from typing import Dict, Any, Union, List, Optional
 from ..backend.email_composition import reply_to_email_by_number, compose_email
 from ..backend.outlook_session import OutlookSessionManager
+from ..backend.validation import ValidationError
 
 
 def reply_to_email_by_number_tool(
@@ -10,7 +11,7 @@ def reply_to_email_by_number_tool(
     reply_text: str, 
     to_recipients: Union[str, List[str], None] = None, 
     cc_recipients: Union[str, List[str], None] = None
-) -> dict:
+) -> Dict[str, Any]:
     """Reply to an email with custom recipients if provided
 
     Args:
@@ -37,9 +38,9 @@ def reply_to_email_by_number_tool(
         }
     """
     if not isinstance(email_number, int) or email_number < 1:
-        raise ValueError("Email number must be a positive integer")
+        raise ValidationError("Email number must be a positive integer")
     if not reply_text or not isinstance(reply_text, str):
-        raise ValueError("Reply text must be a non-empty string")
+        raise ValidationError("Reply text must be a non-empty string")
     
     try:
         result = reply_to_email_by_number(email_number, reply_text, to_recipients, cc_recipients)
@@ -48,7 +49,7 @@ def reply_to_email_by_number_tool(
         return {"type": "text", "text": f"Error replying to email: {str(e)}"}
 
 
-def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: Optional[str] = None) -> dict:
+def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: Optional[str] = None) -> Dict[str, Any]:
     """Compose and send a new email
 
     Args:
@@ -65,11 +66,11 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
         }
     """
     if not recipient_email or not isinstance(recipient_email, str):
-        raise ValueError("Recipient email must be a non-empty string")
+        raise ValidationError("Recipient email must be a non-empty string")
     if not subject or not isinstance(subject, str):
-        raise ValueError("Subject must be a non-empty string")
+        raise ValidationError("Subject must be a non-empty string")
     if not body or not isinstance(body, str):
-        raise ValueError("Body must be a non-empty string")
+        raise ValidationError("Body must be a non-empty string")
     
     try:
         # Parse semicolon-separated email addresses into lists
@@ -84,7 +85,7 @@ def compose_email_tool(recipient_email: str, subject: str, body: str, cc_email: 
         return {"type": "text", "text": f"Error composing email: {str(e)}"}
 
 
-def move_email_tool(email_number: int, target_folder_name: str) -> dict:
+def move_email_tool(email_number: int, target_folder_name: str) -> Dict[str, Any]:
     """Move an email to the specified folder.
 
     Args:
@@ -106,9 +107,9 @@ def move_email_tool(email_number: int, target_folder_name: str) -> dict:
         Use format: "user@company.com/Inbox/SubFolder" not just "Inbox/SubFolder"
     """
     if not isinstance(email_number, int) or email_number < 1:
-        raise ValueError("Email number must be a positive integer")
+        raise ValidationError("Email number must be a positive integer")
     if not target_folder_name or not isinstance(target_folder_name, str):
-        raise ValueError("Target folder name must be a non-empty string")
+        raise ValidationError("Target folder name must be a non-empty string")
 
     try:
         # Use direct email operations instead of session manager wrapper
@@ -119,7 +120,7 @@ def move_email_tool(email_number: int, target_folder_name: str) -> dict:
         return {"type": "text", "text": f"Error moving email: {str(e)}"}
 
 
-def delete_email_by_number_tool(email_number: int) -> dict:
+def delete_email_by_number_tool(email_number: int) -> Dict[str, Any]:
     """Move an email to the Deleted Items folder.
 
     Args:
@@ -137,7 +138,7 @@ def delete_email_by_number_tool(email_number: int) -> dict:
         This tool moves the email to the Deleted Items folder instead of permanently deleting it.
     """
     if not isinstance(email_number, int) or email_number < 1:
-        raise ValueError("Email number must be a positive integer")
+        raise ValidationError("Email number must be a positive integer")
 
     try:
         # Use direct email operations instead of session manager wrapper

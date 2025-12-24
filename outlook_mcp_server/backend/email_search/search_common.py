@@ -5,12 +5,15 @@ This module contains shared functions and utilities used across different
 email search implementations.
 """
 
-import logging
+# Standard library imports
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-# Set up logging
-logger = logging.getLogger(__name__)
+# Local application imports
+from ..logging_config import get_logger
+from ..validation import BatchProcessing
+
+logger = get_logger(__name__)
 
 
 def get_folder_path_safe(folder_name: Optional[str] = None) -> str:
@@ -469,7 +472,7 @@ def unified_cache_load_workflow(emails_data: List[Dict[str, Any]], operation_nam
                     continue
         else:
             # For larger datasets, use batch processing
-            batch_size = 50
+            batch_size = BatchProcessing.DEFAULT_BATCH_SIZE
             for i in range(0, len(emails_data), batch_size):
                 batch = emails_data[i:i + batch_size]
                 for email_data in batch:

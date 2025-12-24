@@ -1,33 +1,26 @@
-from typing import Optional
+"""Shared constants and cache management for email operations."""
 
-# Global configuration constants
-MAX_DAYS = 30
-MAX_EMAILS = 1000
-MAX_LOAD_TIME = 58  # seconds
-LAZY_LOADING_ENABLED = True  # Enable lazy loading for email details
-
-# Connection configuration
-CONNECT_TIMEOUT = 30  # seconds
-MAX_RETRIES = 3
-INITIAL_BACKOFF = 1  # seconds
-MAX_BACKOFF = 16  # seconds
-
-# Cache configuration
-import os
+# Standard library imports
 import json
-import threading
+import os
 import queue
+import threading
 import time
 from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional, Union
+
+# Local application imports
+from .config import cache_config, connection_config, performance_config
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Cache base location
-CACHE_BASE_DIR = os.path.join(
-    os.getenv("LOCALAPPDATA", os.path.expanduser("~")), "outlook_mcp_server"
-)
-CACHE_EXPIRY_HOURS = 6  # Cache expires after 6 hours
-MAX_CACHE_SIZE = 1000  # Maximum number of emails to keep in cache
-BATCH_SAVE_SIZE = 200  # Increased batch size for better performance (reduced I/O operations)
-CACHE_SAVE_INTERVAL = 15.0  # Increased interval to reduce disk I/O for better performance
+CACHE_BASE_DIR = cache_config.CACHE_BASE_DIR
+CACHE_EXPIRY_HOURS = cache_config.CACHE_EXPIRY_HOURS
+MAX_CACHE_SIZE = performance_config.MAX_CACHE_SIZE
+BATCH_SAVE_SIZE = cache_config.BATCH_SAVE_SIZE
+CACHE_SAVE_INTERVAL = cache_config.CACHE_SAVE_INTERVAL
 
 # Global cache storage
 email_cache = {}
@@ -47,16 +40,16 @@ def _get_cache_file() -> str:
     return os.path.join(CACHE_BASE_DIR, "email_cache.json")
 
 
-def _ensure_cache_dir_exists():
+def _ensure_cache_dir_exists() -> None:
     """Ensure the cache directory exists."""
     if not os.path.exists(CACHE_BASE_DIR):
         os.makedirs(CACHE_BASE_DIR, exist_ok=True)
 
 
 # Performance optimization: Cache parsed datetime objects to avoid repeated parsing
-_email_time_cache = {}
+_email_time_cache: Dict[str, datetime] = {}
 
-def _parse_email_time(received_time_str: str):
+def _parse_email_time(received_time_str: str) -> datetime:
     """Parse email time with caching to avoid repeated parsing."""
     if received_time_str in _email_time_cache:
         return _email_time_cache[received_time_str]
@@ -64,24 +57,41 @@ def _parse_email_time(received_time_str: str):
     try:
         # Handle different datetime formats
         if 'T' in received_time_str:
-            # ISO format: 2025-12-17 23:31:02.980000
-            # Remove microseconds if present
-            if '.' in received_time_str:
-                parts = received_time_str.split('.')
-                received_time_str = parts[0]
-            parsed_time = datetime.fromisoformat(received_time_str)
+            # ISO format: 2025-12-17T23:31:02.980000+00:00 or 2025-12-17 23:31:02.980000
+            # Try to parse directly first (handles microseconds and timezone)
+            try:
+                parsed_time = datetime.fromisoformat(received_time_str)
+            except ValueError:
+                # If direct parsing fails, try removing microseconds
+                if '.' in received_time_str:
+                    parts = received_time_str.split('.')
+                    # Keep the timezone part if present
+                    if '+' in parts[1]:
+                        time_part, tz_part = parts[1].split('+', 1)
+                        received_time_str_clean = parts[0] + '+' + tz_part
+                    elif '-' in parts[1]:
+                        time_part, tz_part = parts[1].split('-', 1)
+                        received_time_str_clean = parts[0] + '-' + tz_part
+                    else:
+                        received_time_str_clean = parts[0]
+                    parsed_time = datetime.fromisoformat(received_time_str_clean)
+                else:
+                    parsed_time = datetime.fromisoformat(received_time_str)
         else:
             # Try other formats
             parsed_time = datetime.strptime(received_time_str, "%m/%d/%y %H:%M:%S")
+            # Assume UTC for non-ISO formats
+            from datetime import timezone
+            parsed_time = parsed_time.replace(tzinfo=timezone.utc)
     except (ValueError, TypeError):
         parsed_time = datetime.min
     
-    # Cache the result
+    # Cache the result with the original string as key
     _email_time_cache[received_time_str] = parsed_time
     return parsed_time
 
 
-def add_email_to_cache(email_id: str, email_data: dict):
+def add_email_to_cache(email_id: str, email_data: Dict[str, Any]) -> None:
     """Add an email to the cache with size management, sorted by received time.
 
     Args:
@@ -105,7 +115,7 @@ def add_email_to_cache(email_id: str, email_data: dict):
     email_received_time = _parse_email_time(received_time_str)
     
     # Use binary search for insertion if list is large
-    if len(email_cache_order) > 20:  # Use binary search for larger lists
+    if len(email_cache_order) > performance_config.BINARY_SEARCH_THRESHOLD:  # Use binary search for larger lists
         import bisect
         
         # Create a list of timestamps for binary search (most recent = largest timestamp)
@@ -142,13 +152,16 @@ def add_email_to_cache(email_id: str, email_data: dict):
     # Enforce cache size limit - remove oldest entries if over limit
     while len(email_cache) > MAX_CACHE_SIZE:
         oldest_id = email_cache_order.pop(-1)  # Remove oldest from the end (least recent)
-        del email_cache[oldest_id]  # Remove from cache
+        oldest_email_data = email_cache.pop(oldest_id, None)  # Remove from cache
         
-        # Note: Time cache cleanup is handled when email_data is retrieved before deletion
-        # No additional cleanup needed here
+        # Clean up time cache entry for the removed email
+        if oldest_email_data:
+            oldest_received_time_str = oldest_email_data.get("received_time", "")
+            if oldest_received_time_str in _email_time_cache:
+                del _email_time_cache[oldest_received_time_str]
 
 
-def clear_email_cache():
+def clear_email_cache() -> None:
     """Clear the email cache both in memory and on disk."""
     global email_cache, email_cache_order, _email_time_cache
 
@@ -169,7 +182,216 @@ def clear_email_cache():
         logger.warning(f"Failed to clear email cache from disk: {e}")
 
 
-def _async_cache_saver():
+def clear_cache() -> None:
+    """Clear the email cache both in memory and on disk (deprecated - use clear_email_cache)."""
+    clear_email_cache()
+
+
+def get_cache_size() -> int:
+    """Get the current size of the email cache.
+    
+    Returns:
+        int: Number of emails in the cache
+    """
+    return len(email_cache)
+
+
+def get_cache_stats() -> Dict[str, Any]:
+    """Get statistics about the email cache.
+    
+    Returns:
+        dict: Cache statistics including total emails, oldest and newest email times
+    """
+    oldest_email = None
+    newest_email = None
+    
+    if email_cache_order:
+        try:
+            oldest_id = email_cache_order[-1]
+            newest_id = email_cache_order[0]
+            oldest_email = email_cache.get(oldest_id, {}).get("received_time", "")
+            newest_email = email_cache.get(newest_id, {}).get("received_time", "")
+        except (IndexError, KeyError):
+            pass
+    
+    return {
+        "total_emails": len(email_cache),
+        "cache_size": len(email_cache),
+        "cache_order_size": len(email_cache_order),
+        "time_cache_size": len(_email_time_cache),
+        "oldest_email": oldest_email,
+        "newest_email": newest_email,
+    }
+
+
+def cleanup_cache() -> None:
+    """Clean up the email cache by removing expired entries."""
+    global email_cache, email_cache_order, _email_time_cache
+    
+    from datetime import timezone
+    current_time = datetime.now(timezone.utc)
+    expiry_threshold = current_time - timedelta(hours=CACHE_EXPIRY_HOURS)
+    
+    # Find expired emails
+    expired_ids = []
+    for email_id in email_cache_order:
+        try:
+            received_time_str = email_cache.get(email_id, {}).get("received_time", "")
+            if received_time_str:
+                received_time = _parse_email_time(received_time_str)
+                if received_time < expiry_threshold:
+                    expired_ids.append(email_id)
+        except (ValueError, TypeError):
+            # Skip problematic emails
+            continue
+    
+    # Remove expired emails
+    for email_id in expired_ids:
+        email_cache_order.remove(email_id)
+        email_data = email_cache.pop(email_id, None)
+        if email_data:
+            received_time_str = email_data.get("received_time", "")
+            if received_time_str in _email_time_cache:
+                del _email_time_cache[received_time_str]
+    
+    if expired_ids:
+        logger.info(f"Cleaned up {len(expired_ids)} expired emails from cache")
+
+
+def get_emails_by_date_range(start_date: Union[datetime, str], end_date: Union[datetime, str]) -> List[Dict[str, Any]]:
+    """Get emails within a specific date range.
+    
+    Args:
+        start_date: Start date of the range (datetime or ISO string)
+        end_date: End date of the range (datetime or ISO string)
+        
+    Returns:
+        list: List of email data dictionaries within the date range
+    """
+    from datetime import timezone, timedelta
+    
+    # Convert string dates to datetime if needed
+    if isinstance(start_date, str):
+        try:
+            start_date = datetime.fromisoformat(start_date)
+        except ValueError:
+            return []
+    
+    if isinstance(end_date, str):
+        try:
+            end_date = datetime.fromisoformat(end_date)
+        except ValueError:
+            return []
+    
+    # Ensure timezone-aware comparison
+    if start_date.tzinfo is None:
+        start_date = start_date.replace(tzinfo=timezone.utc)
+    if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+    
+    # Add a small buffer to handle timing edge cases (10 seconds)
+    start_date = start_date - timedelta(seconds=10)
+    end_date = end_date + timedelta(seconds=10)
+    
+    result = []
+    for email_id in email_cache_order:
+        try:
+            received_time_str = email_cache.get(email_id, {}).get("received_time", "")
+            if received_time_str:
+                received_time = _parse_email_time(received_time_str)
+                # Ensure received_time is timezone-aware
+                if received_time.tzinfo is None:
+                    received_time = received_time.replace(tzinfo=timezone.utc)
+                if start_date <= received_time <= end_date:
+                    result.append(email_cache[email_id])
+        except (ValueError, TypeError):
+            continue
+    return result
+
+
+def get_emails_by_sender(sender: str) -> List[Dict[str, Any]]:
+    """Get emails from a specific sender.
+    
+    Args:
+        sender: Sender name or email address to filter by
+        
+    Returns:
+        list: List of email data dictionaries from the specified sender
+    """
+    result = []
+    sender_lower = sender.lower()
+    for email_id in email_cache_order:
+        try:
+            email_data = email_cache.get(email_id, {})
+            # Check both "sender" and "from" fields for compatibility
+            from_field = email_data.get("from", "") or email_data.get("sender", "")
+            if from_field and sender_lower in from_field.lower():
+                result.append(email_data)
+        except (ValueError, TypeError):
+            continue
+    return result
+
+
+def get_emails_by_subject(subject: str) -> List[Dict[str, Any]]:
+    """Get emails with a specific subject.
+    
+    Args:
+        subject: Subject text to filter by
+        
+    Returns:
+        list: List of email data dictionaries matching the subject
+    """
+    result = []
+    subject_lower = subject.lower()
+    for email_id in email_cache_order:
+        try:
+            email_data = email_cache.get(email_id, {})
+            email_subject = email_data.get("subject", "")
+            if email_subject and subject_lower in email_subject.lower():
+                result.append(email_data)
+        except (ValueError, TypeError):
+            continue
+    return result
+
+
+def get_emails_by_date_range_cached(start_date: Union[datetime, str], end_date: Union[datetime, str]) -> List[Dict[str, Any]]:
+    """Get emails within a specific date range (cached version).
+    
+    Args:
+        start_date: Start date of the range (datetime or ISO string)
+        end_date: End date of the range (datetime or ISO string)
+        
+    Returns:
+        list: List of email data dictionaries within the date range
+    """
+    return get_emails_by_date_range(start_date, end_date)
+
+
+def get_emails_by_sender_cached(sender: str) -> List[Dict[str, Any]]:
+    """Get emails from a specific sender (cached version).
+    
+    Args:
+        sender: Sender name or email address to filter by
+        
+    Returns:
+        list: List of email data dictionaries from the specified sender
+    """
+    return get_emails_by_sender(sender)
+
+
+def get_emails_by_subject_cached(subject: str) -> List[Dict[str, Any]]:
+    """Get emails with a specific subject (cached version).
+    
+    Args:
+        subject: Subject text to filter by
+        
+    Returns:
+        list: List of email data dictionaries matching the subject
+    """
+    return get_emails_by_subject(subject)
+
+
+def _async_cache_saver() -> None:
     """Background thread for saving cache to disk."""
     while True:
         try:
@@ -210,7 +432,7 @@ def _async_cache_saver():
             logger.warning(f"Failed to save email cache in background: {e}")
 
 
-def save_email_cache(force_save=False):
+def save_email_cache(force_save: bool = False) -> None:
     """Save the email cache to disk with optimized asynchronous batching.
     
     Args:
@@ -260,7 +482,7 @@ def save_email_cache(force_save=False):
         logger.warning(f"Failed to queue email cache save: {e}")
 
 
-def load_email_cache():
+def load_email_cache() -> None:
     """Load the email cache from disk if it exists and is not expired."""
     global email_cache, email_cache_order
     try:
@@ -306,11 +528,12 @@ def load_email_cache():
         email_cache_order = []
 
 
-def get_email_from_cache(email_number: int) -> Optional[dict]:
-    """Get an email from cache by its cache number (1-based).
+def get_email_from_cache(email_identifier: Union[int, str]) -> Optional[Dict[str, Any]]:
+    """Get an email from cache by its cache number (1-based) or email ID.
 
     Args:
-        email_number: The 1-based position of email in the cache
+        email_identifier: Either the 1-based position of email in the cache (int)
+                          or the email ID string (str)
 
     Returns:
         The email data dictionary, or None if not found
@@ -319,6 +542,13 @@ def get_email_from_cache(email_number: int) -> Optional[dict]:
         ValueError: If email_number is out of range
     """
     global email_cache, email_cache_order
+
+    # Handle email_id (string) case
+    if isinstance(email_identifier, str):
+        return email_cache.get(email_identifier)
+
+    # Handle email_number (int) case
+    email_number = email_identifier
 
     # Check if email_number is within valid range
     if email_number < 1 or email_number > len(email_cache_order):
@@ -333,7 +563,7 @@ def get_email_from_cache(email_number: int) -> Optional[dict]:
     return email_cache.get(email_id)
 
 
-def immediate_save_cache():
+def immediate_save_cache() -> None:
     """Immediately save the email cache to disk for UVX compatibility.
     
     This function ensures cache persistence between UVX process instances
@@ -371,13 +601,16 @@ def immediate_save_cache():
         logger.warning(f"Failed to immediately save email cache: {e}")
 
 
-def refresh_email_cache_with_new_data():
+def refresh_email_cache_with_new_data() -> bool:
     """Improved cache loading workflow:
     1. Clear both memory and disk cache
     2. Load fresh data into memory
     3. Immediately save to disk once data is loaded
     
     This ensures cache consistency and prevents stale data issues.
+    
+    Returns:
+        bool: True if cache refresh was successful, False otherwise
     """
     try:
         # Step 1: Clear both memory and disk cache for fresh start

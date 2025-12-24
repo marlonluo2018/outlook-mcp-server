@@ -5,17 +5,24 @@ This module provides the main unified search function that coordinates
 between server-side search implementations.
 """
 
-import logging
+# Type imports
 from typing import Any, Dict, List, Optional, Tuple
 
+# Local application imports
+from ..logging_config import get_logger
 from ..outlook_session.session_manager import OutlookSessionManager
-from ..shared import email_cache, add_email_to_cache, clear_email_cache
+from ..shared import add_email_to_cache, clear_email_cache, email_cache
+from ..validation import BatchProcessing
 from ..validators import EmailSearchParams
-from .search_common import get_folder_path_safe, is_server_search_supported, extract_email_info, unified_cache_load_workflow
+from .search_common import (
+    extract_email_info,
+    get_folder_path_safe,
+    is_server_search_supported,
+    unified_cache_load_workflow
+)
 from .server_search import server_side_search
 
-# Set up logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def unified_search(
@@ -77,7 +84,7 @@ def unified_search(
             clear_com_attribute_cache()
             
             # Process in batches for better performance
-            batch_size = 50
+            batch_size = BatchProcessing.DEFAULT_BATCH_SIZE
             total_results = len(results)
             
             for batch_start in range(0, total_results, batch_size):

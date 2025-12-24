@@ -1,14 +1,23 @@
 """Email composition and reply functions with improved encoding handling"""
 
-from typing import List, Optional, Union
-import logging
+# Type imports
+from typing import Any, Callable, Dict, List, Optional, Union
 
+# Local application imports
+from .logging_config import get_logger
 from .outlook_session.session_manager import OutlookSessionManager
 from .shared import email_cache, email_cache_order
 from .utils import safe_encode_text, normalize_email_address
-from .validators import EmailReplyParams, EmailComposeParams
+from .validation import (
+    DisplayConstants,
+    OutlookConstants,
+    ValidationError,
+    validate_cache_available,
+    validate_email_number
+)
+from .validators import EmailComposeParams, EmailReplyParams
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def reply_to_email_by_number(
@@ -46,11 +55,12 @@ def reply_to_email_by_number(
     cc_recipients = params.cc_recipients
     reply_text = params.reply_text
 
-    if not email_cache_order:
-        raise ValueError("No emails available - please list emails first.")
-
-    if not 1 <= email_number <= len(email_cache_order):
-        raise ValueError(f"Email #{email_number} not found in current listing.")
+    try:
+        validate_cache_available(len(email_cache_order))
+        validate_email_number(email_number, len(email_cache_order))
+    except ValidationError as e:
+        logger.error(f"Validation error in reply_to_email_by_number: {e}")
+        raise ValueError(f"Invalid parameters: {e}")
 
     # Get the entry_id from the cache order
     entry_id = email_cache_order[email_number - 1]
@@ -74,7 +84,7 @@ def reply_to_email_by_number(
                 raise RuntimeError("Could not retrieve the email from Outlook.")
 
             # Create a new email message to have full control over formatting
-            new_mail = session.outlook.CreateItem(0)  # 0 = olMailItem
+            new_mail = session.outlook.CreateItem(OutlookConstants.OL_MAIL_ITEM)
 
             # Extract sender email early for use in CC filtering
             sender_email = safe_encode_text(
@@ -134,7 +144,7 @@ def reply_to_email_by_number(
             logger.debug(f"Sender variations to filter against: {sorted(sender_variations)}")
 
             # Create a comprehensive filtering function
-            def is_sender_email(email_address):
+            def is_sender_email(email_address: str) -> bool:
                 """Check if an email address matches any sender variation"""
                 normalized = normalize_email_address(email_address)
                 return normalized in sender_variations
@@ -236,7 +246,7 @@ def reply_to_email_by_number(
             body_lines = [
                 reply_text_safe,
                 "",
-                "_" * 50,
+                "_" * DisplayConstants.SEPARATOR_LINE_LENGTH,
                 f"From: {sender_name}",
                 f"Sent: {sent_on}",
                 f"To: {to_field}",
@@ -263,7 +273,7 @@ def reply_to_email_by_number(
                 logger.warning(f"Failed to set email body, using simplified version: {e}")
                 # Fallback to simple body
                 new_mail.Body = (
-                    f"{reply_text_safe}\n\n{'_' * 50}\n[Original email content unavailable]"
+                    f"{reply_text_safe}\n\n{'_' * DisplayConstants.SEPARATOR_LINE_LENGTH}\n[Original email content unavailable]"
                 )
 
             new_mail.Send()
@@ -337,7 +347,7 @@ def compose_email(
                 ]
 
             # Create and send the email
-            mail = session.outlook.CreateItem(0)  # 0 = olMailItem
+            mail = session.outlook.CreateItem(OutlookConstants.OL_MAIL_ITEM)
             mail.To = "; ".join(encoded_to)
             mail.Subject = subject_safe
 

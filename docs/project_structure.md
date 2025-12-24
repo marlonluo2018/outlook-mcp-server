@@ -43,6 +43,7 @@ This is the heart of the system, implementing email extraction, listing, cache h
 - **shared.py** – Disk+memory email cache system.
 - **utils.py** – General helpers (filters, DASL building, retry decorator, etc.).
 - **validators.py** – Pydantic validation models for tool inputs.
+- **validation.py** – Unified validation utilities with custom ValidationError exception for search terms, email addresses, folder names, and more.
 
 ---
 
@@ -93,6 +94,9 @@ These files expose backend functionality as MCP‑compatible tools.
 Current repository includes only **unit tests**:
 
 ### tests/unit/
+- **test_config.py** – Comprehensive test suite for configuration constants covering cache, connection, performance, display, batch, outlook, email format, attachment, and email metadata configurations.
+- **test_validation.py** – Extensive unit tests for validation functions ensuring robustness against various input scenarios including search terms, email addresses, folder names, and custom ValidationError exception handling.
+- **test_shared.py** – Cache management tests including adding, retrieving, and cleaning up emails in the cache with enhanced edge case handling.
 - **test_direct_search.py**
 - **test_early_termination_fix.py**
 - **test_final_search.py**

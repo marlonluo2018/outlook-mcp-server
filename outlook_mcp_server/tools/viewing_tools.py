@@ -1,11 +1,23 @@
 """Email viewing tools for Outlook MCP Server."""
 
-from ..backend.email_data_extractor import get_email_by_number_unified, format_email_with_media
-from ..backend.shared import email_cache, email_cache_order, clear_email_cache
+# Type imports
+from typing import Any, Dict, List, Optional, Union
+
+# Local application imports
+from ..backend.email_data_extractor import format_email_with_media, get_email_by_number_unified
 from ..backend.outlook_session import OutlookSessionManager
+from ..backend.shared import clear_email_cache, email_cache, email_cache_order
+from ..backend.validation import (
+    ValidationError,
+    validate_cache_available,
+    validate_days_parameter,
+    validate_email_number,
+    validate_folder_name,
+    validate_page_parameter
+)
 
 
-def view_email_cache_tool(page: int = 1) -> dict:
+def view_email_cache_tool(page: int = 1) -> Dict[str, Any]:
     """View comprehensive information of cached emails (5 emails per page).
     Shows Subject, From, To, CC, Received, Status, and Attachments.
 
@@ -36,8 +48,10 @@ def view_email_cache_tool(page: int = 1) -> dict:
             }
         }
     """
-    if not isinstance(page, int) or page < 1:
-        raise ValueError("Page must be a positive integer")
+    try:
+        validate_page_parameter(page, 0)
+    except ValidationError as e:
+        raise ValidationError(str(e))
     
     try:
         if not email_cache_order:
@@ -214,7 +228,7 @@ def view_email_cache_tool(page: int = 1) -> dict:
         }
 
 
-def get_email_by_number_tool(email_number: int, mode: str = "basic", include_attachments: bool = True, embed_images: bool = True) -> dict:
+def get_email_by_number_tool(email_number: int, mode: str = "basic", include_attachments: bool = True, embed_images: bool = True) -> Dict[str, Any]:
     """Get email content by cache number with 3 retrieval modes.
     
     Mode Selection Guide:
@@ -246,11 +260,13 @@ def get_email_by_number_tool(email_number: int, mode: str = "basic", include_att
         ValueError: If email number is invalid or no emails are loaded
         RuntimeError: If cache contains invalid data
     """
-    if not isinstance(email_number, int) or email_number < 1:
-        raise ValueError("Email number must be a positive integer")
+    try:
+        validate_email_number(email_number, len(email_cache_order))
+    except ValidationError as e:
+        raise ValidationError(str(e))
     
     if mode not in ["basic", "enhanced", "lazy"]:
-        raise ValueError("Mode must be one of: basic, enhanced, lazy")
+        raise ValidationError("Mode must be one of: basic, enhanced, lazy")
     
     try:
         email_data = get_email_by_number_unified(
@@ -270,20 +286,20 @@ def get_email_by_number_tool(email_number: int, mode: str = "basic", include_att
         formatted_email = format_email_with_media(email_data)
         return {"type": "text", "text": formatted_email}
         
-    except ValueError as e:
-        return {"type": "text", "text": f"Invalid input: {str(e)}"}
+    except ValidationError as e:
+        return {"type": "text", "text": f"Validation error: {str(e)}"}
     except RuntimeError as e:
         return {"type": "text", "text": f"Runtime error: {str(e)}"}
     except Exception as e:
         return {"type": "text", "text": f"Error retrieving email: {str(e)}"}
 
 
-def load_emails_by_folder_tool(folder_path: str, days: int = None, max_emails: int = None) -> dict:
+def load_emails_by_folder_tool(folder_path: str, days: int = None, max_emails: int = None) -> Dict[str, Any]:
     """Load emails from a specific folder into cache.
 
     **LLM Note**: This function enforces strict mutual exclusion between 'days' and 'max_emails' parameters.
     You CANNOT use both parameters together. Choose either time-based loading (days) or number-based loading (max_emails).
-    Attempting to use both parameters will raise a ValueError.
+    Attempting to use both parameters will raise a ValidationError.
 
     Args:
         folder_path: Path to the folder (supports nested paths like "user@company.com/Inbox/SubFolder1")
@@ -306,24 +322,30 @@ def load_emails_by_folder_tool(folder_path: str, days: int = None, max_emails: i
         - Number-based: load_emails_by_folder_tool("Inbox", max_emails=50)
         - Cannot use both: load_emails_by_folder_tool("Inbox", days=7, max_emails=50) - this will raise an error
     """
-    if not folder_path or not isinstance(folder_path, str):
-        raise ValueError("Folder path must be a non-empty string")
+    try:
+        validate_folder_name(folder_path)
+    except ValidationError as e:
+        return {"type": "text", "text": f"Validation error: {str(e)}"}
+    
+    validated_folder = folder_path
     
     # Enforce mutual exclusion: cannot use both days and max_emails together
     if days is not None and max_emails is not None:
-        raise ValueError("Cannot specify both 'days' and 'max_emails' parameters. Use either time-based (days) or number-based (max_emails) loading, not both.")
+        return {"type": "text", "text": "Cannot specify both 'days' and 'max_emails' parameters. Use either time-based (days) or number-based (max_emails) loading, not both."}
     
     # Set default behavior if neither parameter is specified
     if days is None and max_emails is None:
         days = 7  # Default to 7 days if neither parameter is specified
     
     # Validate parameters
-    if days is not None:
-        if not isinstance(days, int) or days < 1 or days > 30:
-            raise ValueError("Days must be an integer between 1 and 30")
-    
-    if max_emails is not None and (not isinstance(max_emails, int) or max_emails < 1):
-        raise ValueError("max_emails must be a positive integer when specified")
+    try:
+        if days is not None:
+            validate_days_parameter(days)
+        
+        if max_emails is not None and (not isinstance(max_emails, int) or max_emails < 1):
+            raise ValidationError("max_emails must be a positive integer when specified")
+    except ValidationError as e:
+        return {"type": "text", "text": f"Validation error: {str(e)}"}
     
     try:
         # Determine max_emails based on parameters
@@ -336,7 +358,7 @@ def load_emails_by_folder_tool(folder_path: str, days: int = None, max_emails: i
             actual_max_emails = 10000  # High limit to capture all emails in the specified date range
 
         with OutlookSessionManager() as outlook_session:
-            email_list, message = outlook_session.get_folder_emails(folder_path, actual_max_emails, fast_mode=True, days_filter=days if max_emails is None else None)
+            email_list, message = outlook_session.get_folder_emails(validated_folder, actual_max_emails, fast_mode=True, days_filter=days if max_emails is None else None)
             return {"type": "text", "text": message + ". Use 'view_email_cache_tool' to view them."}
     except Exception as e:
         return {"type": "text", "text": f"Error loading emails from folder: {str(e)}"}

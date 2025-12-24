@@ -1,11 +1,12 @@
 """Folder management tools for Outlook MCP Server."""
 
-from typing import Optional
+from typing import Dict, Any, Optional
 from ..backend.outlook_session import OutlookSessionManager
 from ..backend.outlook_session.folder_operations import FolderOperations
+from ..backend.validation import ValidationError
 
 
-def move_folder_tool(source_folder_path: str, target_parent_path: str) -> dict:
+def move_folder_tool(source_folder_path: str, target_parent_path: str) -> Dict[str, Any]:
     """Move a folder and all its emails to a new location.
 
     Args:
@@ -27,9 +28,9 @@ def move_folder_tool(source_folder_path: str, target_parent_path: str) -> dict:
         Use format: "user@company.com/Inbox/SubFolder" not just "Inbox/SubFolder"
     """
     if not source_folder_path or not isinstance(source_folder_path, str):
-        raise ValueError("Source folder path must be a non-empty string")
+        raise ValidationError("Source folder path must be a non-empty string")
     if not target_parent_path or not isinstance(target_parent_path, str):
-        raise ValueError("Target parent path must be a non-empty string")
+        raise ValidationError("Target parent path must be a non-empty string")
 
     try:
         with OutlookSessionManager() as session_manager:
@@ -40,7 +41,7 @@ def move_folder_tool(source_folder_path: str, target_parent_path: str) -> dict:
         return {"type": "text", "text": f"Error moving folder: {str(e)}"}
 
 
-def get_folder_list_tool() -> dict:
+def get_folder_list_tool() -> Dict[str, Any]:
     """Lists all Outlook mail folders in a hierarchical structure.
 
     Returns:
@@ -73,7 +74,7 @@ def _get_subfolder_lines(folder, indent):
     return lines
 
 
-def create_folder_tool(folder_name: str, parent_folder_name: Optional[str] = None) -> dict:
+def create_folder_tool(folder_name: str, parent_folder_name: Optional[str] = None) -> Dict[str, Any]:
     """Create a new folder in the specified parent folder.
 
     Args:
@@ -92,7 +93,7 @@ def create_folder_tool(folder_name: str, parent_folder_name: Optional[str] = Non
         For simple folder creation, you can use just the folder name and specify parent_folder_name
     """
     if not folder_name or not isinstance(folder_name, str):
-        raise ValueError("Folder name must be a non-empty string")
+        raise ValidationError("Folder name must be a non-empty string")
     
     try:
         with OutlookSessionManager() as session_manager:
@@ -103,7 +104,7 @@ def create_folder_tool(folder_name: str, parent_folder_name: Optional[str] = Non
         return {"type": "text", "text": f"Error creating folder: {str(e)}"}
 
 
-def remove_folder_tool(folder_name: str) -> dict:
+def remove_folder_tool(folder_name: str) -> Dict[str, Any]:
     """Remove an existing folder.
 
     Args:
@@ -121,7 +122,7 @@ def remove_folder_tool(folder_name: str) -> dict:
         Use format: "user@company.com/Inbox/SubFolder" not just "Inbox/SubFolder"
     """
     if not folder_name or not isinstance(folder_name, str):
-        raise ValueError("Folder name must be a non-empty string")
+        raise ValidationError("Folder name must be a non-empty string")
 
     try:
         with OutlookSessionManager() as session_manager:

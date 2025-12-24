@@ -5,17 +5,22 @@ This module provides functions for listing recent emails and getting emails
 from specific folders with various filtering options.
 """
 
-import logging
+# Standard library imports
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple
 
+# Local application imports
+from ..logging_config import get_logger
 from ..outlook_session.session_manager import OutlookSessionManager
-from ..shared import email_cache, email_cache_order, add_email_to_cache, clear_email_cache
+from ..shared import add_email_to_cache, clear_email_cache, email_cache, email_cache_order
 from ..validators import EmailListParams
-from .search_common import extract_email_info, get_folder_path_safe, unified_cache_load_workflow
+from .search_common import (
+    extract_email_info,
+    get_folder_path_safe,
+    unified_cache_load_workflow
+)
 
-# Set up logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def list_recent_emails(folder_name: str = "Inbox", days: int = None) -> Tuple[List[Dict[str, Any]], str]:

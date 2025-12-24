@@ -5,13 +5,19 @@ This module provides decorators for handling COM operations, retries,
 and other common patterns used throughout the session management code.
 """
 
+# Standard library imports
 import logging
 import time
 from functools import wraps
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
+
+# Third-party imports
 import pythoncom
 
-logger = logging.getLogger(__name__)
+# Local application imports
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def retry_on_com_error(max_attempts: int = 3, initial_delay: float = 1.0, backoff_factor: float = 2.0):

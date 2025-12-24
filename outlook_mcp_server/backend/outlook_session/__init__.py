@@ -23,11 +23,11 @@ from .utils import (
     safe_release_com_object,
     get_available_folders,
     parse_folder_path,
-    validate_email_address,
     sanitize_folder_name,
     convert_com_time_to_string,
     COMObjectWrapper
 )
+from ..validation import validate_email_address
 from .decorators import (
     safe_com_operation,
     log_com_operation,

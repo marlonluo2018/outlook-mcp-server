@@ -4,16 +4,19 @@ Folder operations for Outlook session management.
 This module provides folder-related operations such as creation, deletion, moving, and retrieval.
 """
 
-import logging
-from typing import Optional, Any, Dict, List, Tuple
-from datetime import datetime
+# Standard library imports
 import time
+from datetime import datetime
 from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple
 
-from ..utils import retry_on_com_error, OutlookFolderType
-from .exceptions import FolderNotFoundError, OperationFailedError, InvalidParameterError
+# Local application imports
+from ..logging_config import get_logger
+from ..utils import OutlookFolderType, retry_on_com_error
+from ..validation import BatchProcessing
+from .exceptions import FolderNotFoundError, InvalidParameterError, OperationFailedError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FolderOperations:
@@ -539,7 +542,7 @@ class FolderOperations:
                 extractor = extract_email_info
             
             # Process in batches with progress indication
-            batch_size = 50 if fast_mode else 25  # Smaller batches for full extraction
+            batch_size = BatchProcessing.FAST_MODE_BATCH_SIZE if fast_mode else BatchProcessing.FULL_EXTRACTION_BATCH_SIZE
             total_items = len(limited_items)
             
             for i in range(0, total_items, batch_size):

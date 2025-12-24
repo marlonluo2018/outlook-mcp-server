@@ -266,6 +266,25 @@ Try these with your AI assistant:
 - Searches complete in real-time
 - All processing happens locally (your data stays private)
 
+## ✅ Quality & Reliability
+
+### Robust Validation System
+- **Input Validation**: All user inputs are validated before processing
+- **Custom Error Messages**: Clear, actionable error messages for common issues
+- **Safety Checks**: Prevents invalid operations before they cause problems
+
+### Comprehensive Testing
+- **145+ Unit Tests**: Every feature thoroughly tested
+- **Configuration Coverage**: All settings and constants validated
+- **Edge Case Handling**: Tested against unusual inputs and scenarios
+- **Continuous Quality**: Tests run on every change to ensure reliability
+
+### What This Means for You
+- **Fewer Errors**: Validation catches mistakes before they cause problems
+- **Better Error Messages**: Know exactly what went wrong and how to fix it
+- **Reliable Operation**: Comprehensive testing ensures consistent performance
+- **Safe Operations**: Built-in safeguards prevent accidental data loss
+
 ## 🛡️ Privacy & Security
 
 - **100% Local Processing**: No data leaves your computer

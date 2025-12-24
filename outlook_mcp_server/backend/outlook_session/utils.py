@@ -5,14 +5,19 @@ This module provides utility functions for handling Outlook sessions,
 COM objects, and common operations that don't fit into the main classes.
 """
 
-import logging
+# Standard library imports
 import time
-from typing import Optional, Any, List, Dict, Union
 from functools import wraps
+from typing import Any, Dict, List, Optional, Union
+
+# Third-party imports
 import pythoncom
 import win32com.client
 
-logger = logging.getLogger(__name__)
+# Local application imports
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def safe_com_call(func):
@@ -243,23 +248,6 @@ def parse_folder_path(folder_path: str) -> Dict[str, Any]:
             "path_parts": [folder_path],
             "mailbox": None
         }
-
-
-def validate_email_address(email: str) -> bool:
-    """
-    Basic validation of email address format.
-    
-    Args:
-        email: Email address to validate
-        
-    Returns:
-        bool: True if valid format, False otherwise
-    """
-    if not email or not isinstance(email, str):
-        return False
-    
-    # Basic email validation
-    return "@" in email and "." in email and len(email) > 3
 
 
 def sanitize_folder_name(name: str) -> str:

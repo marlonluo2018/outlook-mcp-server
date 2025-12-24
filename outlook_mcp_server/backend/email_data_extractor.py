@@ -1,14 +1,24 @@
 """Simplified email data extraction with single comprehensive mode."""
 
-import logging
-from typing import Dict, Any, Optional
+# Type imports
+from typing import Any, Dict, Optional
 
-from .outlook_session.session_manager import OutlookSessionManager
-from .utils import OutlookItemClass, safe_encode_text
+# Local application imports
 from .email_utils import _format_recipient_for_display
+from .logging_config import get_logger
+from .outlook_session.session_manager import OutlookSessionManager
 from .shared import email_cache, email_cache_order
+from .utils import OutlookItemClass, safe_encode_text
+from .validation import (
+    AttachmentType,
+    BatchLimits,
+    BodyFormat,
+    FlagStatus,
+    Importance,
+    Sensitivity
+)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,8 +106,8 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
                             pass
                         
                         # Method 2: Check attachment type - embedded attachments are usually Type 4 (OLE) or Type 3 (Embedded)
-                        attachment_type = getattr(attachment, 'Type', 1)
-                        if attachment_type in [3, 4]:  # 3 = Embedded, 4 = OLE
+                        attachment_type = getattr(attachment, 'Type', AttachmentType.BY_VALUE)
+                        if attachment_type in [AttachmentType.EMBEDDED, AttachmentType.OLE]:
                             is_embedded = True
                         
                         # Method 3: Check if it's an image with suspicious naming patterns
@@ -135,7 +145,7 @@ def extract_comprehensive_email_data(email: Dict[str, Any]) -> Dict[str, Any]:
                             attachment_info = {
                                 "name": file_name,
                                 "size": getattr(attachment, 'Size', 0),
-                                "type": getattr(attachment, 'Type', 1)  # 1 = ByValue, 2 = ByReference, 3 = Embedded, 4 = OLE
+                                "type": getattr(attachment, 'Type', AttachmentType.BY_VALUE)
                             }
                             attachments.append(attachment_info)
                     

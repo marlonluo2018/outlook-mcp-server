@@ -1,7 +1,21 @@
 """Email search tools for Outlook MCP Server."""
 
-from typing import Optional
+# Type imports
+from typing import Any, Callable, Dict, Optional
+
+# Local application imports
 from ..backend import email_search
+from ..backend.logging_config import get_logger
+from ..backend.validation import (
+    ValidationError,
+    execute_cache_loading_operation,
+    get_folder_path_safe,
+    validate_days_parameter,
+    validate_folder_name,
+    validate_search_term
+)
+
+logger = get_logger(__name__)
 
 # Import specific functions from the email_search module
 list_recent_emails = email_search.list_recent_emails
@@ -11,7 +25,7 @@ search_email_by_recipient = email_search.search_email_by_recipient
 search_email_by_body = email_search.search_email_by_body
 
 
-def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) -> dict:
+def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) -> Dict[str, Any]:
     """Load emails into cache and return count message.
 
     Args:
@@ -29,41 +43,25 @@ def list_recent_emails_tool(days: int = 7, folder_name: Optional[str] = None) ->
         For nested folders, use full path format: "user@company.com/Inbox/SubFolder"
         For top-level folders, you can use just the folder name or full path: "Inbox" or "user@company.com/Inbox"
     """
-    # Input validation
-    if not isinstance(days, int):
-        raise ValueError("Days parameter must be an integer")
-    if days < 1 or days > 30:
-        raise ValueError("Days parameter must be between 1 and 30")
+    def validate_params() -> Optional[str]:
+        validate_days_parameter(days)
+        return validate_folder_name(folder_name)
     
-    # Ensure folder_name is a string or None
-    if folder_name is not None and not isinstance(folder_name, str):
-        raise ValueError("Folder name must be a string or None")
+    validated_folder = validate_params()
+    folder_path = get_folder_path_safe(validated_folder)
     
-    # Log the request for debugging
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"list_recent_emails_tool called with days={days}, folder_name={folder_name}")
-    
-    # If folder_name is None, use the default
-    if folder_name is None:
-        folder_name = "Inbox"
-    
-    try:
-        logger.info(f"Calling list_recent_emails with folder={folder_name}, days={days}")
-        emails, message = list_recent_emails(folder_name=folder_name, days=days)
-        logger.info(f"list_recent_emails returned: {len(emails)} emails, message: {message}")
-        
-        return {"type": "text", "text": message + " (max 30 days). Use 'view_email_cache_tool' to view them."}
-    except Exception as e:
-        logger.error(f"Error in list_recent_emails_tool: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"type": "text", "text": f"Error retrieving emails: {str(e)}"}
+    return execute_cache_loading_operation(
+        operation_func=list_recent_emails,
+        operation_name="list_recent_emails_tool",
+        message_suffix=" (max 30 days)",
+        folder_name=folder_path,
+        days=days
+    )
 
 
 def search_email_by_subject_tool(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> dict:
+) -> Dict[str, Any]:
     """Search email subjects and load matching emails into cache.
 
     This function only searches the email subject field. It does not search in the email body,
@@ -88,20 +86,27 @@ def search_email_by_subject_tool(
         For top-level folders, you can use just the folder name or full path: "Inbox" or "user@company.com/Inbox"
 
     """
-    if not search_term or not isinstance(search_term, str):
-        raise ValueError("Search term must be a non-empty string")
-    if not isinstance(days, int):
-        raise ValueError("Days parameter must be an integer")
-    if days < 1 or days > 30:
-        raise ValueError("Days parameter must be between 1 and 30")
-    emails, note = search_email_by_subject(search_term, days, folder_name, match_all=match_all)
-    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
-    return {"type": "text", "text": result}
+    def validate_params() -> Optional[str]:
+        validate_search_term(search_term)
+        validate_days_parameter(days)
+        return validate_folder_name(folder_name)
+    
+    validated_folder = validate_params()
+    
+    return execute_cache_loading_operation(
+        operation_func=search_email_by_subject,
+        operation_name="search_email_by_subject_tool",
+        message_suffix=f" from last {days} days (max 30 days)",
+        search_term=search_term,
+        days=days,
+        folder_name=validated_folder,
+        match_all=match_all
+    )
 
 
 def search_email_by_sender_name_tool(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> dict:
+) -> Dict[str, Any]:
     """Search emails by sender name and load matching emails into cache.
 
     This function only searches the sender name field. It does not search in the email body,
@@ -128,20 +133,27 @@ def search_email_by_sender_name_tool(
         For top-level folders, you can use just the folder name or full path: "Inbox" or "user@company.com/Inbox"
 
     """
-    if not search_term or not isinstance(search_term, str):
-        raise ValueError("Search term must be a non-empty string")
-    if not isinstance(days, int):
-        raise ValueError("Days parameter must be an integer")
-    if days < 1 or days > 30:
-        raise ValueError("Days parameter must be between 1 and 30")
-    emails, note = search_email_by_sender(search_term, days, folder_name, match_all=match_all)
-    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
-    return {"type": "text", "text": result}
+    def validate_params() -> Optional[str]:
+        validate_search_term(search_term)
+        validate_days_parameter(days)
+        return validate_folder_name(folder_name)
+    
+    validated_folder = validate_params()
+    
+    return execute_cache_loading_operation(
+        operation_func=search_email_by_sender,
+        operation_name="search_email_by_sender_name_tool",
+        message_suffix=f" from last {days} days (max 30 days)",
+        search_term=search_term,
+        days=days,
+        folder_name=validated_folder,
+        match_all=match_all
+    )
 
 
 def search_email_by_recipient_name_tool(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> dict:
+) -> Dict[str, Any]:
     """Search emails by recipient name and load matching emails into cache.
 
     This function only searches the recipient (To) field. It does not search in the email body,
@@ -168,20 +180,27 @@ def search_email_by_recipient_name_tool(
         For top-level folders, you can use just the folder name or full path: "Inbox" or "user@company.com/Inbox"
 
     """
-    if not search_term or not isinstance(search_term, str):
-        raise ValueError("Search term must be a non-empty string")
-    if not isinstance(days, int):
-        raise ValueError("Days parameter must be an integer")
-    if days < 1 or days > 30:
-        raise ValueError("Days parameter must be between 1 and 30")
-    emails, note = search_email_by_recipient(search_term, days, folder_name, match_all=match_all)
-    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
-    return {"type": "text", "text": result}
+    def validate_params() -> Optional[str]:
+        validate_search_term(search_term)
+        validate_days_parameter(days)
+        return validate_folder_name(folder_name)
+    
+    validated_folder = validate_params()
+    
+    return execute_cache_loading_operation(
+        operation_func=search_email_by_recipient,
+        operation_name="search_email_by_recipient_name_tool",
+        message_suffix=f" from last {days} days (max 30 days)",
+        search_term=search_term,
+        days=days,
+        folder_name=validated_folder,
+        match_all=match_all
+    )
 
 
 def search_email_by_body_tool(
     search_term: str, days: int = 7, folder_name: Optional[str] = None, match_all: bool = True
-) -> dict:
+) -> Dict[str, Any]:
     """Search emails by body content and load matching emails into cache.
 
     This function searches the email body content. It does not search in the subject,
@@ -211,12 +230,19 @@ def search_email_by_body_tool(
         }
 
     """
-    if not search_term or not isinstance(search_term, str):
-        raise ValueError("Search term must be a non-empty string")
-    if not isinstance(days, int):
-        raise ValueError("Days parameter must be an integer")
-    if days < 1 or days > 30:
-        raise ValueError("Days parameter must be between 1 and 30")
-    emails, note = search_email_by_body(search_term, days, folder_name, match_all=match_all)
-    result = f"{note} from last {days} days (max 30 days). Use 'view_email_cache_tool' to view them."
-    return {"type": "text", "text": result}
+    def validate_params() -> Optional[str]:
+        validate_search_term(search_term)
+        validate_days_parameter(days)
+        return validate_folder_name(folder_name)
+    
+    validated_folder = validate_params()
+    
+    return execute_cache_loading_operation(
+        operation_func=search_email_by_body,
+        operation_name="search_email_by_body_tool",
+        message_suffix=f" from last {days} days (max 30 days)",
+        search_term=search_term,
+        days=days,
+        folder_name=validated_folder,
+        match_all=match_all
+    )

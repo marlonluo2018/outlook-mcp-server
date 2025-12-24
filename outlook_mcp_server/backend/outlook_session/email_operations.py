@@ -5,16 +5,17 @@ This module provides email-related operations such as moving emails between fold
 managing email policies, and retrieving email details.
 """
 
-import logging
+# Type imports
 from typing import Any, Dict, List, Optional, Tuple
 
+# Local application imports
+from ..logging_config import get_logger
 from ..outlook_session.session_manager import OutlookSessionManager
 from ..shared import email_cache, email_cache_order
 from ..validators import EmailNumberParam
-from .exceptions import OperationFailedError, InvalidParameterError
+from .exceptions import InvalidParameterError, OperationFailedError
 
-# Set up logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EmailOperations:

@@ -1,13 +1,17 @@
 """
 Parallel email extraction for performance optimization.
 """
-import logging
-from typing import List, Dict, Any
+
+# Standard library imports
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-import threading
+from typing import Any, Dict, List
 
-logger = logging.getLogger(__name__)
+# Local application imports
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Thread-local storage for COM objects
 _thread_local = threading.local()

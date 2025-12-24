@@ -1,9 +1,11 @@
 """Batch operations tools for Outlook MCP Server."""
 
+from typing import Dict, Any
 from ..backend.batch_operations import batch_forward_emails
+from ..backend.validation import ValidationError
 
 
-def batch_forward_email_tool(email_number: int, csv_path: str, custom_text: str = "") -> dict:
+def batch_forward_email_tool(email_number: int, csv_path: str, custom_text: str = "") -> Dict[str, Any]:
     """Forward an email to recipients listed in a CSV file in batches of 500 (Outlook BCC limit).
 
     This function uses an email from your cache as a template and forwards it to multiple recipients
@@ -39,11 +41,11 @@ def batch_forward_email_tool(email_number: int, csv_path: str, custom_text: str 
         - This function forwards existing emails, it does not compose new ones
     """
     if not isinstance(email_number, int) or email_number < 1:
-        raise ValueError("Email number must be a positive integer")
+        raise ValidationError("Email number must be a positive integer")
     if not csv_path or not isinstance(csv_path, str):
-        raise ValueError("CSV path must be a non-empty string")
+        raise ValidationError("CSV path must be a non-empty string")
     if custom_text is not None and not isinstance(custom_text, str):
-        raise ValueError("Custom text must be a string or None")
+        raise ValidationError("Custom text must be a string or None")
 
     try:
         result = batch_forward_emails(email_number, csv_path, custom_text)
