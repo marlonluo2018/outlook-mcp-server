@@ -1,6 +1,6 @@
 # 🤖 Outlook MCP Server
 
-**AI-powered email management for Microsoft Outlook** - Search, compose, and organize with natural language commands.
+**AI-powered email management for Microsoft Outlook** - Search, compose, organize, and batch forward emails with natural language commands.
 
 <div align="center">
 
@@ -18,6 +18,7 @@
 - **Smart Email Search**: "Find emails about budget approval from last week"
 - **AI Email Writing**: Draft replies with context-aware suggestions  
 - **Easy Organization**: Create folders and move emails with simple commands
+- **Batch Forwarding**: Send emails to 100s of recipients in minutes, not hours
 
 ### Requirements
 - ✅ Python 3.8+
@@ -130,7 +131,7 @@ python -c "import win32com.client; outlook = win32com.client.Dispatch('Outlook.A
 - **Search**: Find emails by subject, sender, content, or date range
 - **Compose**: Write new emails with AI assistance
 - **Reply**: Smart replies that understand conversation context
-- **Batch Operations**: Send to multiple recipients from CSV files
+- **Batch Forward**: Send emails to 100s of recipients from CSV files (saves hours!)
 
 ### Folder Management  
 - **List**: See all your Outlook folders
@@ -138,7 +139,54 @@ python -c "import win32com.client; outlook = win32com.client.Dispatch('Outlook.A
 - **Move**: Organize emails between folders
 - **Delete**: Remove folders (careful - this is permanent!)
 
-## � How It Works
+## 📧 Batch Forwarding: Save Hours on Email Distribution
+
+### Real-World Use Cases
+
+**🎯 Team Updates**
+- Forward weekly reports to your entire team
+- Send meeting notes to all participants
+- Distribute project updates to stakeholders
+
+**📊 Marketing Campaigns**  
+- Send newsletters to subscriber lists
+- Forward promotional emails to customer segments
+- Distribute event invitations to contact groups
+
+**🏢 Corporate Communications**
+- Send policy updates to all employees
+- Forward training materials to departments
+- Distribute announcements to company distribution lists
+
+### How It Works
+
+**1. Prepare Your CSV File**
+```csv
+email
+john@company.com
+jane@company.com
+team@company.com
+```
+
+**2. Use Natural Language**
+```
+"Forward this meeting invite to everyone in my contacts.csv"
+"Send this project update to my team list"
+"Distribute this newsletter to subscribers.csv"
+```
+
+**3. AI Handles the Rest**
+- Automatically splits large lists (max 500 per batch)
+- Sends via BCC to protect recipient privacy
+- Adds your custom message before original email
+- Provides delivery confirmation
+
+### Time Savings
+**Manual forwarding**: 100 emails × 30 seconds = 50 minutes
+**Batch forwarding**: 30 seconds setup + 2 minutes processing = 2.5 minutes
+**You save**: 47.5 minutes per batch!
+
+## 🔄 How It Works
 
 ### Simple Workflow
 1. **Load emails**: "Show me recent emails" → Emails appear in cache
