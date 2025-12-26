@@ -181,8 +181,21 @@ python -c "import win32com.client; outlook = win32com.client.Dispatch('Outlook.A
 - Forward training materials to departments
 - Distribute announcements to company distribution lists
 
-### How It Works
+## 🔄 How It Works
 
+### Simple Workflow
+1. **Load emails**: "Show me recent emails" → Emails appear in cache
+2. **Browse results**: View 5 emails per page with clear formatting
+3. **Take action**: Reply, move, delete, or get AI summary
+4. **Confirm before sending**: AI always asks before sending emails
+
+### AI Assistant Behavior
+- **Understands natural language**: "Find urgent emails from my boss"
+- **Shows email summaries**: One-line overview + key action items
+- **Drafts with context**: Replies understand the conversation
+- **Never sends without permission**: Always confirms before sending
+
+### Batch Forwarding Workflow
 **1. Prepare Your CSV File**
 ```csv
 email
@@ -208,20 +221,6 @@ team@company.com
 **Manual forwarding**: 100 emails × 30 seconds = 50 minutes
 **Batch forwarding**: 30 seconds setup + 2 minutes processing = 2.5 minutes
 **You save**: 47.5 minutes per batch!
-
-## 🔄 How It Works
-
-### Simple Workflow
-1. **Load emails**: "Show me recent emails" → Emails appear in cache
-2. **Browse results**: View 5 emails per page with clear formatting
-3. **Take action**: Reply, move, delete, or get AI summary
-4. **Confirm before sending**: AI always asks before sending emails
-
-### AI Assistant Behavior
-- **Understands natural language**: "Find urgent emails from my boss"
-- **Shows email summaries**: One-line overview + key action items
-- **Drafts with context**: Replies understand the conversation
-- **Never sends without permission**: Always confirms before sending
 
 ## 🔧 Common Commands
 
