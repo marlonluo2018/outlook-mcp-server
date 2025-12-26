@@ -290,6 +290,54 @@ Try these with your AI assistant:
 - **No Cloud Services**: Works entirely offline
 - **Secure by Design**: Uses your existing Outlook installation
 
+## 🤖 AI Agent Configuration
+
+### Agent Prompt Template
+
+The `agent_prompt_template.md` file contains the complete configuration for the AI email assistant. This template defines:
+
+**Core Components:**
+- **ROLE**: Defines the AI's identity and relationship with the user
+- **GUIDING PRINCIPLES**: Ethical and operational guidelines that govern all interactions
+- **WORKFLOWS**: Structured processes for email search, summarization, and drafting
+- **CONSTRAINTS**: Safety boundaries and operational limitations
+- **EXAMPLES**: Practical usage patterns for common tasks
+
+**Key Features:**
+- **User Context**: Personalizes interactions with your name and email address
+- **AND Logic Default**: Search terms use AND logic unless explicitly specified otherwise
+- **5-by-5 Display**: Browsing results show 5 emails per page with consistent formatting
+- **Confirmation Required**: No email actions occur without explicit user approval
+- **Structured Drafting**: Multi-phase workflow for creating high-quality email replies
+
+**Customization:**
+You can modify the prompt template to:
+- Adjust the AI's tone and communication style
+- Add specific company policies or guidelines
+- Customize workflow steps to match your preferences
+- Include personal context for more relevant interactions
+
+### Create Agent
+
+You can create your own AI email agent using the `agent_prompt_template.md` file as a starting point:
+
+**Agent Creation Workflow:**
+1. **Copy the Template Content**: Open `agent_prompt_template.md` and copy the entire content
+2. **Customize Variables**: Replace placeholders like `[User Name]`, `[Full Name]`, and `[user.email@domain.com]` with actual user data
+3. **Adjust Settings**: Modify workflow rules, constraints, and examples to match your specific requirements
+4. **Create Agent**: Use the customized template content in your AI platform to create the agent
+
+**Benefits of Using This Template:**
+- **Proven Structure**: Leverage our tested workflow patterns for reliable email management
+- **Safety First**: Built-in constraints ensure responsible AI behavior and user control
+- **Consistent Experience**: Users get predictable interactions across different AI platforms
+- **Easy Customization**: Modify the template to match your specific needs and preferences
+
+**Example Use Cases:**
+- **Personal Email Assistant**: Create an agent to manage individual inboxes
+- **Team Collaboration Assistant**: Build an agent for shared team email accounts
+- **Customer Support Agent**: Customize for handling customer inquiries and support tickets
+
 ## 📚 Need Help?
 
 - Check the [agent prompt template](agent_prompt_template.md) for AI assistant setup
