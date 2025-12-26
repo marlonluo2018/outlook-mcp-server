@@ -22,13 +22,13 @@
 
 ### 🤖 AI Behavior & Workflow
 
-The `agent_prompt_template.md` defines how the AI assistant behaves when managing emails:
+The [`agent_prompt_template.md`](agent_prompt_template.md) defines how the AI assistant behaves when managing emails:
 - **Purpose**: Guide the AI's workflow for email search, summarization, and drafting
 - **Key Rules**: AND logic for searches, 5-by-5 email display, confirmation before sending
 - **Safety**: Built-in constraints ensure user control and prevent unauthorized actions
 - **How to Use**: Copy the template content and use it to configure your AI assistant
 
-*See the template for complete behavior guidelines and workflow definitions*
+*See the [template](agent_prompt_template.md) for complete behavior guidelines and workflow definitions*
 
 ### Why Choose Outlook MCP Server?
 
