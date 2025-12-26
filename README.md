@@ -45,11 +45,11 @@ The [`agent_prompt_template.md`](agent_prompt_template.md) defines how the AI as
 
 ### Real-World Impact
 
-**Before**: "I need to forward this meeting invite to 150 team members..."
+**Before**: "I need to forward this email to 150 team members..."
 - Manual: Click Forward → Type each email → Send → **2+ hours wasted**
 - Traditional Outlook: Create distribution list → Add members → Forward → **30+ minutes**
 
-**After**: "Forward this meeting invite to everyone in team.csv"
+**After**: "Forward this email to everyone in team.csv"
 - Outlook MCP Server: Load CSV → AI forwards to all → **2 minutes total**
 - **Time Saved**: 48+ minutes per batch operation!
 
@@ -178,7 +178,7 @@ python -c "import win32com.client; outlook = win32com.client.Dispatch('Outlook.A
 
 **🎯 Team Updates**
 - Forward weekly reports to your entire team
-- Send meeting notes to all participants
+- Send important updates to all team members
 - Distribute project updates to stakeholders
 
 **📊 Marketing Campaigns**  
@@ -216,7 +216,7 @@ team@company.com
 
 **2. Use Natural Language**
 ```
-"Forward this meeting invite to everyone in my contacts.csv"
+"Forward this email to everyone in my contacts.csv"
 "Send this project update to my team list"
 "Distribute this newsletter to subscribers.csv"
 ```
