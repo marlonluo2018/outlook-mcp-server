@@ -29,14 +29,6 @@
 - **✅ Cloud-Scale Performance**: No local application dependencies
 - **✅ Online Access**: Works directly with cloud-based Microsoft 365 services
 
-### Key Architectural Difference:
-- **win32COM**: Emails retrieved from **local Outlook** after login and download (requires Outlook desktop app)
-- **Microsoft Graph**: Emails accessed **online** directly from Microsoft 365 cloud services
-
-**Choose based on your needs:**
-- Need offline access to locally stored emails? Use **win32COM** (this project)
-- Need online access to full Microsoft 365 ecosystem? Use **Microsoft Graph API** (new project)
-
 ---
 
 ## 🚀 Quick Start (2 Minutes)
