@@ -14,7 +14,7 @@
 
 ## ⚠️ Technical Limitations & Future Direction
 
-**This project uses win32COM which has significant limitations. We recommend using our new [Microsoft Graph MCP Server](https://github.com/marlonluo2018/microsoft_graph_mcp_server) which provides better functionality and broader ecosystem support.**
+**This project uses win32COM which works entirely locally with your Outlook data (more secure), while our new [Microsoft Graph MCP Server](https://github.com/marlonluo2018/microsoft_graph_mcp_server) provides online access to the full Microsoft 365 ecosystem (more features). Choose based on your security and functionality needs.**
 
 ### Key Limitations of win32COM:
 - **❌ Ecosystem Limitations**: Only supports Outlook - cannot access Teams, SharePoint, OneDrive, or other Microsoft 365 applications
@@ -26,6 +26,15 @@
 - **✅ Cross-Platform Support**: Works on Windows, macOS, Linux, and mobile devices
 - **✅ Modern Authentication**: OAuth 2.0 with device code flow
 - **✅ Cloud-Scale Performance**: No local application dependencies
+- **✅ Online Access**: Works directly with cloud-based Microsoft 365 services
+
+### Key Architectural Difference:
+- **win32COM**: Emails retrieved from **local Outlook** after login and download (requires Outlook desktop app)
+- **Microsoft Graph**: Emails accessed **online** directly from Microsoft 365 cloud services
+
+**Choose based on your needs:**
+- Need offline access to locally stored emails? Use **win32COM** (this project)
+- Need online access to full Microsoft 365 ecosystem? Use **Microsoft Graph API** (new project)
 
 ---
 
