@@ -12,7 +12,7 @@
 
 </div>
 
-## ⚠️ Technical Limitations & Future Direction
+## 🤔 Project Choice: Local vs Cloud Approach
 
 **This project uses win32COM which works entirely locally with your Outlook data (more secure), while our new [Microsoft Graph MCP Server](https://github.com/marlonluo2018/microsoft_graph_mcp_server) provides online access to the full Microsoft 365 ecosystem (more features). Choose based on your security and functionality needs.**
 
