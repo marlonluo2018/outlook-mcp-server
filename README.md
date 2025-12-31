@@ -302,10 +302,72 @@ Try these with your AI assistant:
 
 
 
+## ⚠️ Technical Limitations & Future Direction
+
+### win32COM Limitations
+
+This project currently uses the **win32COM** library to interface with Microsoft Outlook. While this approach provides direct access to Outlook's functionality, it comes with several critical limitations:
+
+- **Ecosystem Limitations**: **Only supports Outlook** - cannot access Teams, SharePoint, OneDrive, or other Microsoft 365 applications
+- **Windows Only**: Requires Microsoft Outlook to be installed and running on Windows
+- **Desktop Application Dependency**: Outlook desktop app must be open and accessible
+- **Limited Scalability**: Performance can degrade with large email volumes
+- **No Cross-Platform Support**: Cannot run on macOS, Linux, or mobile devices
+- **API Restrictions**: Limited to features available through Outlook's COM interface
+
+### Next Generation: Microsoft Graph MCP Server
+
+We're excited to announce a new project that addresses these limitations: **[Microsoft Graph MCP Server](https://github.com/marlonluo2018/microsoft_graph_mcp_server)**
+
+**Key Advantages of Microsoft Graph API:**
+
+| Feature | win32COM (Current) | Microsoft Graph (New) |
+|---------|-------------------|----------------------|
+| **Ecosystem Support** | **Only Outlook** | **Full Microsoft 365 ecosystem** (Mail, Calendar, Teams, OneDrive, SharePoint) |
+| **Platform Support** | Windows only | Cross-platform (Windows, macOS, Linux, mobile) |
+| **Outlook Dependency** | Requires Outlook desktop app | Works with Outlook web, mobile, and desktop |
+| **Authentication** | Local Windows authentication | Modern OAuth 2.0 with device code flow |
+| **Scalability** | Limited by local resources | Cloud-scale performance |
+| **Modern Features** | Basic email operations | **Teams integration, file management, collaboration tools** |
+
+**Why Switch to Microsoft Graph MCP Server?**
+
+- **Cross-Platform**: Access your emails from any device, anywhere
+- **Modern Authentication**: Secure OAuth 2.0 without complex configuration
+- **Full Microsoft 365 Ecosystem**: Access not just email but also **Teams, SharePoint, OneDrive, Calendar, and all Microsoft 365 applications**
+- **Teams Integration**: Manage Teams channels, messages, and team collaboration
+- **SharePoint Access**: Work with SharePoint sites, documents, and lists
+- **OneDrive Management**: Access and manage files in OneDrive
+- **Better Performance**: Cloud-based processing with improved scalability
+- **Future-Proof**: Microsoft's recommended API for all Microsoft 365 integrations
+
+**Get Started with Microsoft Graph MCP Server:**
+
+```bash
+# Install the new server
+pip install microsoft-graph-mcp-server
+
+# Configure in your MCP client
+{
+  "mcpServers": {
+    "microsoft-graph": {
+      "command": "python",
+      "args": ["-m", "microsoft_graph_mcp_server.main"]
+    }
+  }
+}
+```
+
+Visit the [Microsoft Graph MCP Server repository](https://github.com/marlonluo2018/microsoft_graph_mcp_server) for complete documentation and migration guide.
+
+
+
 ## 📚 Need Help?
 
 - Check the [agent prompt template](agent_prompt_template.md) for AI assistant setup
 - See [configuration examples](mcp-config-uvx.json) for different installation methods
+- Read the [Win32COM vs Graph API comparison](docs/win32com_vs_graph_api_comparison.md) for technical details
+- Review [Win32COM API implementation guide](docs/win32com_api_implementation.md) for performance optimization
 - Report issues on the [GitHub repository](https://github.com/marlonluo2018/outlook-mcp-server/issues)
 
 ---
